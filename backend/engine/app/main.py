@@ -4,6 +4,8 @@ from pydantic import BaseModel
 from typing import List, Optional
 import math
 from datetime import datetime, timedelta
+import urllib.request
+import json
 
 from .database import get_db
 from .models import Location, ActivityPOI
@@ -37,6 +39,22 @@ def calc_travel_time(dist_km: float, mode: str) -> int:
     spd = speeds.get(mode.upper(), 5.0)
     return math.ceil((dist_km / spd) * 60)
 
+def get_weather_info(lat: float, lng: float):
+    # Dynamické plánování počasí přes Open-Meteo API
+    try:
+        url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lng}&current_weather=true"
+        req = urllib.request.Request(url, headers={'User-Agent': 'KrusnoPlan/1.0'})
+        response = urllib.request.urlopen(req, timeout=3)
+        data = json.loads(response.read().decode('utf-8'))
+        weathercode = data.get("current_weather", {}).get("weathercode", 0)
+        
+        # WMO Kódy: 50+ znamená déšť, sníh, bouřky
+        if weathercode >= 50:
+            return "BAD_WEATHER"
+        return "GOOD_WEATHER"
+    except Exception:
+        return "UNKNOWN"
+
 @app.get("/internal/locations")
 def get_locations(db: Session = Depends(get_db)):
     return db.query(Location).all()
@@ -68,6 +86,17 @@ def generate_plan(req: PlanRequest, db: Session = Depends(get_db)):
     if not loc:
         raise HTTPException(status_code=404, detail="Lokace nenalezena.")
 
+    # 1. Zohlednění počasí
+    weather_status = get_weather_info(loc.lat, loc.lng)
+    weather_message = "Počasí je ideální pro jakékoliv aktivity."
+    
+    if weather_status == "BAD_WEATHER":
+        weather_message = "V destinaci prší/sněží! Trasa byla automaticky upravena a zaměřena na vnitřní aktivity."
+        # Vyfiltrujeme venkovní aktivity, pokud máme z čeho jiného vybírat
+        indoor_pois = [p for p in pois if p.category not in ["PARK", "RUNNING", "OUTDOOR"]]
+        if len(indoor_pois) > 0:
+            pois = indoor_pois
+
     # Klonování listu POI pro algoritmus "Nejbližší soused" (Nearest Neighbor)
     unvisited = pois[:]
     
@@ -86,11 +115,35 @@ def generate_plan(req: PlanRequest, db: Session = Depends(get_db)):
         min_dist = float('inf')
         
         for p in unvisited:
+            # 2. Zohlednění otevírací doby (Opening Hours)
+            try:
+                # Odhad času příjezdu k památce
+                dist_approx = haversine_distance(curr_lat, curr_lng, p.lat, p.lng)
+                time_approx = calc_travel_time(dist_approx, req.transport_mode)
+                arrival_time = current_time + timedelta(minutes=time_approx)
+                
+                # Zpracování open_time a close_time
+                oh_h, oh_m = map(int, p.open_time.split(':'))
+                ct_h, ct_m = map(int, p.close_time.split(':'))
+                
+                open_dt = arrival_time.replace(hour=oh_h, minute=oh_m, second=0)
+                close_dt = arrival_time.replace(hour=ct_h, minute=ct_m, second=0)
+                
+                # Pokud dorazíme před otvíračkou, nebo nestihneme prohlídku před zavíračkou, přeskočíme
+                if arrival_time < open_dt or (arrival_time + timedelta(minutes=p.est_duration_mins)) > close_dt:
+                    continue
+            except Exception:
+                pass # Pokud chybí data otevírací doby (např. park), ignorujeme a necháme projít
+                
             dist = haversine_distance(curr_lat, curr_lng, p.lat, p.lng)
             if dist < min_dist:
                 min_dist = dist
                 closest_poi = p
                 
+        # Pokud už není žádná památka otevřená, ukončíme hledání
+        if closest_poi is None:
+            break
+            
         poi = closest_poi
         unvisited.remove(poi)
 
@@ -157,6 +210,8 @@ def generate_plan(req: PlanRequest, db: Session = Depends(get_db)):
 
     return {
         "status": "success",
+        "message": weather_message,
+        "weather_status": weather_status,
         "location": loc.name,
         "route_type": req.route_type,
         "transport_mode": req.transport_mode,

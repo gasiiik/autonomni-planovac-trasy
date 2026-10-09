@@ -20,5 +20,7 @@ class ActivityPOI(Base):
     lat = Column(Float)
     lng = Column(Float)
     image_url = Column(String(255))
+    open_time = Column(String(5), default="00:00") # např. "09:00"
+    close_time = Column(String(5), default="23:59") # např. "17:00"
     
     location = relationship("Location")

@@ -213,8 +213,16 @@
                 const itinDiv = document.getElementById('itinerary');
                 itinDiv.innerHTML = '';
                 
-                if(!data.itinerary) {
-                    itinDiv.innerHTML = `<div class="text-red-500">Chyba API: ${data.detail || data.error}</div>`;
+                if (data.message) {
+                    let weatherBg = data.weather_status === 'BAD_WEATHER' ? 'bg-red-100 text-red-800 border-red-200' : 'bg-blue-100 text-blue-800 border-blue-200';
+                    let weatherIcon = data.weather_status === 'BAD_WEATHER' ? '🌧️' : '☀️';
+                    itinDiv.innerHTML += `<div class="${weatherBg} border p-4 rounded-xl mb-4 font-bold">
+                        ${weatherIcon} Zpráva Meteostanice: ${data.message}
+                    </div>`;
+                }
+                
+                if(!data.itinerary || data.itinerary.length === 0) {
+                    itinDiv.innerHTML += `<div class="text-red-500 font-bold p-4">Žádná trasa nebyla vygenerována (možná je už všude zavřeno nebo chybí čas!).</div>`;
                     return;
                 }
 

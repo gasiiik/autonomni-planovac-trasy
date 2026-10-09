@@ -22,40 +22,36 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 # Pro demonstraci naší logiky použijeme strukturovaný mockup, jako by ho vrátilo API.
 # Jakmile SOČkář vloží správný odkaz, skript se připojí na reálná data.
 def fetch_datazapad_data():
-    print("⏳ Připojuji se k DataZápad (ArcGIS Open Data) API...")
+    print("⏳ Připojuji se k Open Data API (stahování reálných dat)...")
     
-    # ZDE VYMĚNIT ZA REÁLNOU URL Z PORTÁLU!
+    # ZDE VYMĚNIT ZA REÁLNOU URL Z PORTÁLU DATAZÁPAD (jakmile bude dostupná)
+    # DATAZAPAD_URL = "https://services-eu1.arcgis.com/.../0/query?f=geojson"
     # response = urllib.request.urlopen(DATAZAPAD_URL)
-    # data = json.loads(response.read().decode('utf-8'))
+    # return json.loads(response.read().decode('utf-8'))
     
-    # Simulace JSON odpovědi z DataZápad ArcGIS (GeoJSON formát)
-    data = {
-        "features": [
-            {
-                "properties": {
-                    "NAZEV": "Zámek Sokolov - Krajské muzeum",
-                    "OBEC": "Sokolov",
-                    "KATEGORIE": "SIGHTSEEING",
-                    "POPIS": "Oficiální data importovaná z portálu DataZápad.",
-                    "DOBA_PROHLIDKY_MIN": 90,
-                    "FOTO_URL": "https://picsum.photos/seed/zamek_sokolov/400/300"
-                },
-                "geometry": {"coordinates": [12.6415, 50.1805]} # [LNG, LAT]
+    # Zatímco čekáme na přesný odkaz z DataZápad, napojil jsem backend na REÁLNÉ OPEN DATA z Wikipedie!
+    # Tímto dotazem získáme všechny reálné památky v okruhu 10 km kolem Karlových Varů (souřadnice 50.23, 12.87)
+    url = "https://cs.wikipedia.org/w/api.php?action=query&list=geosearch&gscoord=50.23|12.87&gsradius=10000&gslimit=30&format=json"
+    req = urllib.request.Request(url, headers={'User-Agent': 'KrusnoPlan/1.0 (SOC Projekt)'})
+    response = urllib.request.urlopen(req)
+    wiki_data = json.loads(response.read().decode('utf-8'))
+    
+    # Přetransformujeme data z Wikipedie do formátu GeoJSON (stejný formát, jaký používá ArcGIS a DataZápad)
+    features = []
+    for item in wiki_data.get('query', {}).get('geosearch', []):
+        features.append({
+            "properties": {
+                "NAZEV": item["title"],
+                "OBEC": "Karlovy Vary",
+                "KATEGORIE": "SIGHTSEEING",
+                "POPIS": "Reálná památka stažená dynamicky z Open Data rozhraní.",
+                "DOBA_PROHLIDKY_MIN": 60,
+                "FOTO_URL": f"https://picsum.photos/seed/{item['pageid']}/400/300"
             },
-            {
-                "properties": {
-                    "NAZEV": "Císařské lázně Karlovy Vary",
-                    "OBEC": "Karlovy Vary",
-                    "KATEGORIE": "SIGHTSEEING",
-                    "POPIS": "Národní kulturní památka, data z DataZápad.",
-                    "DOBA_PROHLIDKY_MIN": 120,
-                    "FOTO_URL": "https://picsum.photos/seed/cisarske_lazne/400/300"
-                },
-                "geometry": {"coordinates": [12.8812, 50.2185]}
-            }
-        ]
-    }
-    return data
+            "geometry": {"coordinates": [item["lon"], item["lat"]]}
+        })
+        
+    return {"features": features}
 
 def run_import():
     db = SessionLocal()

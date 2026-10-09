@@ -22,6 +22,8 @@ CREATE TABLE IF NOT EXISTS activity_pois (
     lat DECIMAL(10,8),
     lng DECIMAL(11,8),
     image_url VARCHAR(255),
+    open_time VARCHAR(5) DEFAULT '09:00',
+    close_time VARCHAR(5) DEFAULT '18:00',
     FOREIGN KEY (location_id) REFERENCES locations(id) ON DELETE CASCADE
 );
 
