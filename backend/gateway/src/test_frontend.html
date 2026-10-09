@@ -83,8 +83,30 @@
         document.addEventListener('DOMContentLoaded', async () => {
             const todayStr = new Date().toISOString().split('T')[0];
             const dateInput = document.getElementById('date-input');
+            const timeFromInput = document.getElementById('time-from');
+            
             dateInput.value = todayStr;
             dateInput.min = todayStr; // Zabrání výběru data v minulosti
+            
+            // Funkce pro aktualizaci minimálního času
+            function updateMinTime() {
+                if (dateInput.value === todayStr) {
+                    const now = new Date();
+                    const currentHours = now.getHours().toString().padStart(2, '0');
+                    const currentMinutes = now.getMinutes().toString().padStart(2, '0');
+                    timeFromInput.min = `${currentHours}:${currentMinutes}`;
+                    
+                    // Pokud je aktuálně nastavený čas v minulosti, posuneme ho na teď
+                    if (timeFromInput.value < timeFromInput.min) {
+                        timeFromInput.value = timeFromInput.min;
+                    }
+                } else {
+                    timeFromInput.removeAttribute('min');
+                }
+            }
+            
+            dateInput.addEventListener('change', updateMinTime);
+            updateMinTime(); // Inicializace při načtení
             
             try {
                 const res = await fetch('http://localhost:8080/api/locations');

@@ -46,10 +46,12 @@ def generate_plan(req: PlanRequest, db: Session = Depends(get_db)):
     t_from = datetime.strptime(req.time_from, "%Y-%m-%d %H:%M:%S")
     t_to = datetime.strptime(req.time_to, "%Y-%m-%d %H:%M:%S")
     
-    # Validace: Nelze plánovat na datum v minulosti (kontrolujeme jenom datum, abychom neblokovali časy v rámci dneška pro testy)
-    today_date = datetime.now().date()
-    if t_from.date() < today_date:
+    # Validace: Nelze plánovat do minulosti
+    now = datetime.now()
+    if t_from.date() < now.date():
         raise HTTPException(status_code=400, detail="Nelze plánovat trasu na datum v minulosti.")
+    if t_from.date() == now.date() and t_from.time() < now.time():
+        raise HTTPException(status_code=400, detail="Nelze plánovat trasu na čas, který již dnes proběhl.")
 
     total_mins = int((t_to - t_from).total_seconds() / 60)
     
