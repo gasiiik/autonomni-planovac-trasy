@@ -121,9 +121,25 @@
 
             document.getElementById('btn-generate').addEventListener('click', async () => {
                 const date = document.getElementById('date-input').value;
+                const timeFrom = document.getElementById('time-from').value;
+                
+                // Přísná validace času na frontendu těsně před odesláním (aby se zabránilo odeslání, pokud stránka byla dlouho otevřená)
+                if (date === todayStr) {
+                    const now = new Date();
+                    const currentHours = now.getHours().toString().padStart(2, '0');
+                    const currentMinutes = now.getMinutes().toString().padStart(2, '0');
+                    const currentTime = `${currentHours}:${currentMinutes}`;
+                    
+                    if (timeFrom < currentTime) {
+                        alert("Zablokováno front-endem: Nelze naplánovat trasu do minulosti! Čas byl automaticky posunut na aktuální.");
+                        document.getElementById('time-from').value = currentTime;
+                        return; // Přeruší odeslání na backend
+                    }
+                }
+
                 const req = {
                     location_id: parseInt(document.getElementById('loc-select').value),
-                    time_from: `${date} ${document.getElementById('time-from').value}:00`,
+                    time_from: `${date} ${timeFrom}:00`,
                     time_to: `${date} ${document.getElementById('time-to').value}:00`,
                     transport_mode: document.getElementById('transport').value,
                     route_type: document.getElementById('route-type').value,
