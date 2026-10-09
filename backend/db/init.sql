@@ -33,21 +33,21 @@ INSERT INTO locations (name, lat, lng) VALUES ('Cheb', 50.0797, 12.3739);
 INSERT INTO locations (name, lat, lng) VALUES ('Františkovy Lázně', 50.1197, 12.3512);
 
 -- Karlovy Vary POIs
-INSERT INTO activity_pois (location_id, name, description, category, est_duration_mins, lat, lng) 
-VALUES (1, 'Vřídelní kolonáda', 'Hlavní centrum pro památky a ochutnávky.', 'SIGHTSEEING', 45, 50.2230, 12.8833);
+INSERT INTO activity_pois (location_id, name, description, category, est_duration_mins, lat, lng, image_url) 
+VALUES (1, 'Vřídelní kolonáda', 'Hlavní centrum pro památky a ochutnávky.', 'SIGHTSEEING', 45, 50.2230, 12.8833, 'https://images.unsplash.com/photo-1627918451877-62283fc3dbbf?auto=format&fit=crop&w=400&q=80');
 
-INSERT INTO activity_pois (location_id, name, description, category, est_duration_mins, lat, lng) 
-VALUES (1, 'Grandhotel Pupp', 'Skvělé místo na kávu a zákusek po cestě.', 'GASTRO', 40, 50.2192, 12.8808);
+INSERT INTO activity_pois (location_id, name, description, category, est_duration_mins, lat, lng, image_url) 
+VALUES (1, 'Grandhotel Pupp', 'Skvělé místo na kávu a zákusek po cestě.', 'GASTRO', 40, 50.2192, 12.8808, 'https://images.unsplash.com/photo-1541971875076-8f970d573be6?auto=format&fit=crop&w=400&q=80');
 
-INSERT INTO activity_pois (location_id, name, description, category, est_duration_mins, lat, lng) 
-VALUES (1, 'Běh podél Teplé', 'Trasa pro aktivní běžce s výhledem.', 'RUNNING', 30, 50.2150, 12.8780);
+INSERT INTO activity_pois (location_id, name, description, category, est_duration_mins, lat, lng, image_url) 
+VALUES (1, 'Běh podél Teplé', 'Trasa pro aktivní běžce s výhledem.', 'RUNNING', 30, 50.2150, 12.8780, 'https://images.unsplash.com/photo-1476480862126-209bfaa8edc8?auto=format&fit=crop&w=400&q=80');
 
 -- Cheb POIs
-INSERT INTO activity_pois (location_id, name, description, category, est_duration_mins, lat, lng) 
-VALUES (2, 'Chebský hrad', 'Prohlídka historického hradu.', 'SIGHTSEEING', 90, 50.0815, 12.3664);
+INSERT INTO activity_pois (location_id, name, description, category, est_duration_mins, lat, lng, image_url) 
+VALUES (2, 'Chebský hrad', 'Prohlídka historického hradu.', 'SIGHTSEEING', 90, 50.0815, 12.3664, 'https://images.unsplash.com/photo-1628189679198-a28a3bd09ec5?auto=format&fit=crop&w=400&q=80');
 
-INSERT INTO activity_pois (location_id, name, description, category, est_duration_mins, lat, lng) 
-VALUES (2, 'Chebské farmářské trhy', 'Festival plný lokálních potravin.', 'FESTIVAL', 60, 50.0795, 12.3701);
+INSERT INTO activity_pois (location_id, name, description, category, est_duration_mins, lat, lng, image_url) 
+VALUES (2, 'Chebské farmářské trhy', 'Festival plný lokálních potravin.', 'FESTIVAL', 60, 50.0795, 12.3701, 'https://images.unsplash.com/photo-1533900298318-6b8da08a523e?auto=format&fit=crop&w=400&q=80');
 INSERT INTO locations (name, lat, lng) VALUES ('Abertamy', 50.368, 12.818);
 INSERT INTO locations (name, lat, lng) VALUES ('Bečov nad Teplou', 50.084, 12.839);
 INSERT INTO locations (name, lat, lng) VALUES ('Bochov', 50.149, 13.048);

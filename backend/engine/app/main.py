@@ -105,7 +105,8 @@ def generate_plan(req: PlanRequest, db: Session = Depends(get_db)):
                 "category": poi.category,
                 "duration_mins": poi.est_duration_mins,
                 "lat": poi.lat,
-                "lng": poi.lng
+                "lng": poi.lng,
+                "image_url": poi.image_url
             })
             waypoints_for_map.append({"lat": poi.lat, "lng": poi.lng, "name": poi.name, "type": "POI"})
             
