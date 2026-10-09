@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KrušnoPlán Pro | Backend Test UI</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;800&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #F8FAFC; }
+    </style>
+</head>
+<body class="text-slate-800 p-8">
+    <div class="max-w-4xl mx-auto">
+        <h1 class="text-3xl font-extrabold mb-8 text-indigo-900">KrušnoPlán API Tester</h1>
+        
+        <div class="bg-white p-6 rounded-xl shadow border border-slate-100 mb-8">
+            <h2 class="text-xl font-bold mb-4">1. Nastavení API Požadavku</h2>
+            
+            <div class="grid grid-cols-2 gap-4 mb-4">
+                <div>
+                    <label class="block text-sm font-semibold mb-1">Město</label>
+                    <select id="loc-select" class="w-full bg-slate-50 border border-slate-200 rounded p-2"></select>
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold mb-1">Datum (Dnes)</label>
+                    <input type="date" id="date-input" class="w-full bg-slate-50 border border-slate-200 rounded p-2">
+                </div>
+            </div>
+
+            <div class="grid grid-cols-3 gap-4 mb-4">
+                <div>
+                    <label class="block text-sm font-semibold mb-1">Čas Od</label>
+                    <input type="time" id="time-from" value="10:00" class="w-full bg-slate-50 border border-slate-200 rounded p-2">
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold mb-1">Čas Do</label>
+                    <input type="time" id="time-to" value="16:00" class="w-full bg-slate-50 border border-slate-200 rounded p-2">
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold mb-1">Doprava</label>
+                    <select id="transport" class="w-full bg-slate-50 border border-slate-200 rounded p-2">
+                        <option value="WALK">🚶 Pěšky</option>
+                        <option value="BIKE">🚲 Kolo</option>
+                        <option value="CAR">🚗 Auto</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-4 mb-4">
+                <div>
+                    <label class="block text-sm font-semibold mb-1">Typ trasy</label>
+                    <select id="route-type" class="w-full bg-slate-50 border border-slate-200 rounded p-2">
+                        <option value="ONE_WAY">Jednosměrně (jen tam)</option>
+                        <option value="LOOP">Okruh (zpět do výchozího bodu)</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold mb-1">Preference (Kombinace)</label>
+                    <select id="interests" multiple class="w-full bg-slate-50 border border-slate-200 rounded p-2 h-24">
+                        <option value="SIGHTSEEING" selected>Památky (Sightseeing)</option>
+                        <option value="GASTRO" selected>Gastro / Káva</option>
+                        <option value="RUNNING">Běh (Running)</option>
+                        <option value="FESTIVAL">Festivaly</option>
+                        <option value="PARK">Parky / Příroda</option>
+                    </select>
+                </div>
+            </div>
+
+            <button id="btn-generate" class="w-full bg-indigo-600 text-white font-bold py-3 rounded hover:bg-indigo-700">Vygenerovat přes Backend</button>
+        </div>
+
+        <div id="results" class="hidden">
+            <h2 class="text-xl font-bold mb-4">2. Odpověď z API (Itinerář)</h2>
+            <div id="itinerary" class="space-y-4"></div>
+            
+            <h2 class="text-xl font-bold mb-4 mt-8">3. RAW Waypoints (Pro Google Maps)</h2>
+            <pre id="raw-json" class="bg-slate-900 text-green-400 p-4 rounded-xl text-sm overflow-x-auto"></pre>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', async () => {
+            document.getElementById('date-input').valueAsDate = new Date();
+            
+            try {
+                const res = await fetch('http://localhost:8080/api/locations');
+                const data = await res.json();
+                const sel = document.getElementById('loc-select');
+                data.forEach(l => {
+                    const opt = document.createElement('option');
+                    opt.value = l.id; opt.textContent = l.name;
+                    sel.appendChild(opt);
+                });
+            } catch(e) { alert("Nelze načíst lokace. Běží API?"); }
+
+            document.getElementById('btn-generate').addEventListener('click', async () => {
+                const date = document.getElementById('date-input').value;
+                const req = {
+                    location_id: parseInt(document.getElementById('loc-select').value),
+                    time_from: `${date} ${document.getElementById('time-from').value}:00`,
+                    time_to: `${date} ${document.getElementById('time-to').value}:00`,
+                    transport_mode: document.getElementById('transport').value,
+                    route_type: document.getElementById('route-type').value,
+                    interests: Array.from(document.getElementById('interests').selectedOptions).map(o => o.value)
+                };
+
+                const res = await fetch('http://localhost:8080/api/planner', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(req)
+                });
+                
+                const data = await res.json();
+                document.getElementById('results').classList.remove('hidden');
+                document.getElementById('raw-json').textContent = JSON.stringify(data.waypoints, null, 2);
+                
+                const itinDiv = document.getElementById('itinerary');
+                itinDiv.innerHTML = '';
+                
+                if(!data.itinerary) {
+                    itinDiv.innerHTML = `<div class="text-red-500">Chyba API: ${data.detail || data.error}</div>`;
+                    return;
+                }
+
+                data.itinerary.forEach(i => {
+                    if (i.type === 'travel' || i.type === 'travel_return') {
+                        itinDiv.innerHTML += `<div class="bg-slate-200 p-3 rounded text-sm font-semibold text-slate-700 text-center">
+                            🚗 Přesun: ${i.start} - ${i.end} (${i.duration_mins} min)
+                        </div>`;
+                    } else {
+                        let img = i.image_url ? `<img src="${i.image_url}" class="w-full h-40 object-cover mt-2 rounded">` : '';
+                        itinDiv.innerHTML += `<div class="bg-white p-4 rounded shadow border border-indigo-100">
+                            <div class="text-indigo-600 font-bold">${i.start} - ${i.end}</div>
+                            <h3 class="text-lg font-bold">${i.title}</h3>
+                            ${img}
+                        </div>`;
+                    }
+                });
+            });
+        });
+    </script>
+</body>
+</html>
