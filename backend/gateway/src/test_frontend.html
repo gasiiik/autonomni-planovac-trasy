@@ -71,6 +71,30 @@
                 </div>
             </div>
 
+            <div class="grid grid-cols-3 gap-4 mb-4">
+                <div>
+                    <label class="block text-sm font-semibold mb-1">Rozpočet (Kč, prázdné = bez limitu)</label>
+                    <input type="number" id="budget-max" min="0" step="50" placeholder="např. 500" class="w-full bg-slate-50 border border-slate-200 rounded p-2">
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold mb-1">Max. čas na cestě (min)</label>
+                    <input type="number" id="max-travel" min="0" step="5" placeholder="bez limitu" class="w-full bg-slate-50 border border-slate-200 rounded p-2">
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold mb-1">Obtížnost</label>
+                    <select id="difficulty" class="w-full bg-slate-50 border border-slate-200 rounded p-2">
+                        <option value="EASY">Lehká</option>
+                        <option value="MEDIUM">Střední</option>
+                        <option value="HARD" selected>Náročná (vše)</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="flex gap-6 mb-4 text-sm font-semibold">
+                <label class="flex items-center gap-2"><input type="checkbox" id="willing-pay" checked> Jsem ochoten platit vstupné</label>
+                <label class="flex items-center gap-2"><input type="checkbox" id="has-children"> Jedu s dětmi</label>
+            </div>
+
             <button id="btn-generate" class="w-full bg-indigo-600 text-white font-bold py-3 rounded hover:bg-indigo-700">Vygenerovat přes Backend</button>
         </div>
 
@@ -96,7 +120,9 @@
         let mapInstance = null; // Globální instance mapy
 
         document.addEventListener('DOMContentLoaded', async () => {
-            const todayStr = new Date().toISOString().split('T')[0];
+            // Lokální datum (toISOString vrací UTC -> kolem půlnoci by to byl jiný den)
+            const _d = new Date();
+            const todayStr = `${_d.getFullYear()}-${String(_d.getMonth() + 1).padStart(2, '0')}-${String(_d.getDate()).padStart(2, '0')}`;
             const dateInput = document.getElementById('date-input');
             const timeFromInput = document.getElementById('time-from');
             const timeToInput = document.getElementById('time-to');
@@ -191,52 +217,101 @@
                     }
                 }
 
+                const interests = Array.from(document.getElementById('interests').selectedOptions).map(o => o.value);
+                if (interests.length === 0) {
+                    alert("Vyberte alespoň jednu preferenci (Ctrl + klik pro více).");
+                    return;
+                }
+                const budgetVal = document.getElementById('budget-max').value;
+                const travelVal = document.getElementById('max-travel').value;
+
                 const req = {
                     location_id: parseInt(document.getElementById('loc-select').value),
                     time_from: `${date} ${timeFrom}:00`,
                     time_to: `${date} ${document.getElementById('time-to').value}:00`,
                     transport_mode: document.getElementById('transport').value,
                     route_type: document.getElementById('route-type').value,
-                    interests: Array.from(document.getElementById('interests').selectedOptions).map(o => o.value)
+                    interests: interests,
+                    budget_max: budgetVal === '' ? null : parseFloat(budgetVal),
+                    max_travel_time_mins: travelVal === '' ? null : parseInt(travelVal),
+                    difficulty: document.getElementById('difficulty').value,
+                    willing_to_pay_entry: document.getElementById('willing-pay').checked,
+                    has_children: document.getElementById('has-children').checked
                 };
 
-                const res = await fetch('http://localhost:8080/api/planner', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify(req)
-                });
-                
-                const data = await res.json();
+                const btn = document.getElementById('btn-generate');
+                btn.disabled = true; btn.textContent = 'Plánuji...';
+                let res, data;
+                try {
+                    res = await fetch('http://localhost:8080/api/planner', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify(req)
+                    });
+                    data = await res.json();
+                } catch (e) {
+                    alert("Backend neodpovídá. Běží Docker kontejnery?");
+                    return;
+                } finally {
+                    btn.disabled = false; btn.textContent = 'Vygenerovat přes Backend';
+                }
+
                 document.getElementById('results').classList.remove('hidden');
                 document.getElementById('raw-json').textContent = JSON.stringify(data.waypoints, null, 2);
                 
                 const itinDiv = document.getElementById('itinerary');
                 itinDiv.innerHTML = '';
+
+                if (!res.ok) {
+                    const detail = typeof data.detail === 'string' ? data.detail : (data.error || JSON.stringify(data.detail || data));
+                    itinDiv.innerHTML = `<div class="bg-red-100 text-red-800 border border-red-200 p-4 rounded-xl font-bold">⚠️ Chyba: ${detail}</div>`;
+                    return;
+                }
                 
                 if (data.message) {
                     let weatherBg = data.weather_status === 'BAD_WEATHER' ? 'bg-red-100 text-red-800 border-red-200' : 'bg-blue-100 text-blue-800 border-blue-200';
-                    let weatherIcon = data.weather_status === 'BAD_WEATHER' ? '🌧️' : '☀️';
+                    let weatherIcon = data.weather_status === 'BAD_WEATHER' ? '🌧️' : (data.weather_status === 'UNKNOWN' ? '❓' : '☀️');
                     itinDiv.innerHTML += `<div class="${weatherBg} border p-4 rounded-xl mb-4 font-bold">
                         ${weatherIcon} Zpráva Meteostanice: ${data.message}
                     </div>`;
                 }
                 
-                if(!data.itinerary || data.itinerary.length === 0) {
-                    itinDiv.innerHTML += `<div class="text-red-500 font-bold p-4">Žádná trasa nebyla vygenerována (možná je už všude zavřeno nebo chybí čas!).</div>`;
+                if(!data.itinerary || !data.itinerary.some(i => i.type === 'poi')) {
+                    const reason = data.empty_reason || 'Žádná trasa nebyla vygenerována.';
+                    itinDiv.innerHTML += `<div class="text-red-500 font-bold p-4">${reason}</div>`;
                     return;
                 }
+
+                const catLabels = {SIGHTSEEING: '🏛️ Památka', GASTRO: '☕ Gastro', RUNNING: '🏃 Běh', FESTIVAL: '🎉 Festival', PARK: '🌳 Příroda'};
+                const modeIcons = {WALK: '🚶', BIKE: '🚲', CAR: '🚗'};
+
+                itinDiv.innerHTML += `<div class="bg-emerald-50 text-emerald-800 border border-emerald-200 p-4 rounded-xl font-bold flex justify-between">
+                    <span>⏱️ Naplánováno: ${data.total_planned_time} min (volný čas: ${data.remaining_free_time_mins} min)</span>
+                    <span>💰 Odhad nákladů: ${Math.round(data.total_estimated_cost || 0)} Kč</span>
+                </div>`;
 
                 data.itinerary.forEach(i => {
                     if (i.type === 'travel' || i.type === 'travel_return') {
                         itinDiv.innerHTML += `<div class="bg-slate-200 p-3 rounded text-sm font-semibold text-slate-700 text-center">
-                            🚗 Přesun: ${i.start} - ${i.end} (${i.duration_mins} min)
+                            ${modeIcons[i.mode] || '🚗'} ${i.title || 'Přesun'}: ${i.start} - ${i.end} (${i.duration_mins} min, ${i.distance_km} km)
+                        </div>`;
+                    } else if (i.type === 'wait') {
+                        itinDiv.innerHTML += `<div class="bg-amber-50 p-3 rounded text-sm font-semibold text-amber-800 text-center">
+                            ⏳ ${i.title}: ${i.start} - ${i.end} (${i.duration_mins} min)
                         </div>`;
                     } else {
-                        let img = i.image_url ? `<img src="${i.image_url}" class="w-full h-40 object-cover mt-2 rounded">` : '';
+                        let img = i.image_url ? `<img src="${i.image_url}" onerror="this.remove()" class="w-full h-40 object-cover mt-2 rounded">` : '';
+                        const cost = i.estimated_cost > 0 ? `${Math.round(i.estimated_cost)} Kč` : 'Zdarma';
                         itinDiv.innerHTML += `<div class="bg-white p-4 rounded shadow border border-indigo-100">
-                            <div class="text-indigo-600 font-bold">${i.start} - ${i.end}</div>
+                            <div class="flex justify-between text-sm">
+                                <span class="text-indigo-600 font-bold">${i.start} - ${i.end}</span>
+                                <span class="text-slate-500 font-semibold">${catLabels[i.category] || i.category} · ${cost}</span>
+                            </div>
                             <h3 class="text-lg font-bold">${i.title}</h3>
+                            ${i.address ? `<p class="text-xs text-slate-500">📍 ${i.address}</p>` : ''}
                             ${img}
+                            ${i.description ? `<p class="text-sm text-slate-600 mt-2">${i.description}</p>` : ''}
+                            ${i.website ? `<a href="${i.website}" target="_blank" rel="noopener" class="text-sm text-indigo-600 underline">Web místa</a>` : ''}
                         </div>`;
                     }
                 });

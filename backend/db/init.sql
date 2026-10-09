@@ -21,9 +21,21 @@ CREATE TABLE IF NOT EXISTS activity_pois (
     est_duration_mins INT,
     lat DECIMAL(10,8),
     lng DECIMAL(11,8),
-    image_url VARCHAR(255),
+    image_url TEXT,
     open_time VARCHAR(5) DEFAULT '09:00',
     close_time VARCHAR(5) DEFAULT '18:00',
+    price_estimated FLOAT DEFAULT 0.0,
+    tags VARCHAR(255) DEFAULT '',
+    family_friendly TINYINT(1) DEFAULT 1,
+    difficulty_level VARCHAR(20) DEFAULT 'EASY',
+    source VARCHAR(30) DEFAULT 'MANUAL',      -- MANUAL / DATAZAPAD
+    external_id VARCHAR(150),                 -- ID záznamu v DataZápad (služba:OBJECTID)
+    website VARCHAR(255),
+    indoor TINYINT(1) DEFAULT 0,              -- 1 = vnitřní aktivita (vhodná při dešti)
+    address VARCHAR(255),
+    season_from TINYINT,                      -- měsíc 1-12, od kdy má místo sezónu (NULL = celoročně)
+    season_to TINYINT,                        -- měsíc 1-12, do kdy
+    INDEX idx_external_id (external_id),
     FOREIGN KEY (location_id) REFERENCES locations(id) ON DELETE CASCADE
 );
 

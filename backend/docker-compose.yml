@@ -34,5 +34,13 @@ services:
     depends_on:
       - db
 
+  frontend:
+    build:
+      context: ../frontend
+    ports:
+      - "5173:80"
+    depends_on:
+      - php_gateway
+
 volumes:
   mariadb_data:

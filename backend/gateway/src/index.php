@@ -24,6 +24,32 @@ try {
     exit();
 }
 
+// Přeposlání požadavku do Python enginu. Když engine neběží, vrátíme 502 s čitelnou chybou
+// (bez toho by curl_exec vrátil false a frontend dostal HTTP 200 s prázdným tělem).
+function forward_to_engine($path, $payload = null) {
+    $ch = curl_init('http://python_engine:8000' . $path);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 30);
+    if ($payload !== null) {
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, $payload);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
+    }
+    $response = curl_exec($ch);
+    $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    if ($response === false || $http_code === 0) {
+        http_response_code(502);
+        echo json_encode(["error" => "Plánovací engine je nedostupný. Zkuste to prosím za chvíli."]);
+        exit();
+    }
+    http_response_code($http_code);
+    echo $response;
+    exit();
+}
+
 $request_uri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
 $method = $_SERVER['REQUEST_METHOD'];
 
@@ -49,8 +75,14 @@ if ($request_uri === '/api/register' && $method === 'POST') {
         http_response_code(201);
         echo json_encode(["message" => "User successfully registered"]);
     } catch (PDOException $e) {
-        http_response_code(409); // Conflict
-        echo json_encode(["error" => "Username already exists"]);
+        // 23000 = porušení UNIQUE (uživatel už existuje), ostatní chyby jsou chyby serveru
+        if ($e->getCode() === '23000') {
+            http_response_code(409); // Conflict
+            echo json_encode(["error" => "Username already exists"]);
+        } else {
+            http_response_code(500);
+            echo json_encode(["error" => "Registration failed"]);
+        }
     }
     exit();
 }
@@ -86,35 +118,11 @@ if ($request_uri === '/api/login' && $method === 'POST') {
 if ($request_uri === '/api/planner' && $method === 'POST') {
     // Ověření autorizace by proběhlo zde (ověření JWT z hlavičky Bearer)
 
-    $payload = file_get_contents("php://input");
-    
-    // Zabalení cURL requestu pro Python kontejner
-    $ch = curl_init('http://python_engine:8000/internal/planner/generate');
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_POST, true);
-    curl_setopt($ch, CURLOPT_POSTFIELDS, $payload);
-    curl_setopt($ch, CURLOPT_HTTPHEADER, [
-        'Content-Type: application/json'
-    ]);
-    
-    $response = curl_exec($ch);
-    $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
-    
-    http_response_code($http_code);
-    echo $response;
-    exit();
+    forward_to_engine('/internal/planner/generate', file_get_contents("php://input"));
 }
 
 if ($request_uri === '/api/locations' && $method === 'GET') {
-    $ch = curl_init('http://python_engine:8000/internal/locations');
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    $response = curl_exec($ch);
-    $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
-    http_response_code($http_code);
-    echo $response;
-    exit();
+    forward_to_engine('/internal/locations');
 }
 
 http_response_code(404);
