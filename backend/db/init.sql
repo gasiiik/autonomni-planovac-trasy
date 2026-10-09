@@ -34,20 +34,20 @@ INSERT INTO locations (name, lat, lng) VALUES ('Františkovy Lázně', 50.1197, 
 
 -- Karlovy Vary POIs
 INSERT INTO activity_pois (location_id, name, description, category, est_duration_mins, lat, lng, image_url) 
-VALUES (1, 'Vřídelní kolonáda', 'Hlavní centrum pro památky a ochutnávky.', 'SIGHTSEEING', 45, 50.2230, 12.8833, 'https://images.unsplash.com/photo-1627918451877-62283fc3dbbf?auto=format&fit=crop&w=400&q=80');
+VALUES (1, 'Vřídelní kolonáda', 'Hlavní centrum pro památky a ochutnávky.', 'SIGHTSEEING', 45, 50.2230, 12.8833, 'https://picsum.photos/seed/krusno2/400/300');
 
 INSERT INTO activity_pois (location_id, name, description, category, est_duration_mins, lat, lng, image_url) 
-VALUES (1, 'Grandhotel Pupp', 'Skvělé místo na kávu a zákusek po cestě.', 'GASTRO', 40, 50.2192, 12.8808, 'https://images.unsplash.com/photo-1541971875076-8f970d573be6?auto=format&fit=crop&w=400&q=80');
+VALUES (1, 'Grandhotel Pupp', 'Skvělé místo na kávu a zákusek po cestě.', 'GASTRO', 40, 50.2192, 12.8808, 'https://picsum.photos/seed/krusno3/400/300');
 
 INSERT INTO activity_pois (location_id, name, description, category, est_duration_mins, lat, lng, image_url) 
-VALUES (1, 'Běh podél Teplé', 'Trasa pro aktivní běžce s výhledem.', 'RUNNING', 30, 50.2150, 12.8780, 'https://images.unsplash.com/photo-1476480862126-209bfaa8edc8?auto=format&fit=crop&w=400&q=80');
+VALUES (1, 'Běh podél Teplé', 'Trasa pro aktivní běžce s výhledem.', 'RUNNING', 30, 50.2150, 12.8780, 'https://picsum.photos/seed/krusno4/400/300');
 
 -- Cheb POIs
 INSERT INTO activity_pois (location_id, name, description, category, est_duration_mins, lat, lng, image_url) 
-VALUES (2, 'Chebský hrad', 'Prohlídka historického hradu.', 'SIGHTSEEING', 90, 50.0815, 12.3664, 'https://images.unsplash.com/photo-1628189679198-a28a3bd09ec5?auto=format&fit=crop&w=400&q=80');
+VALUES (2, 'Chebský hrad', 'Prohlídka historického hradu.', 'SIGHTSEEING', 90, 50.0815, 12.3664, 'https://picsum.photos/seed/krusno5/400/300');
 
 INSERT INTO activity_pois (location_id, name, description, category, est_duration_mins, lat, lng, image_url) 
-VALUES (2, 'Chebské farmářské trhy', 'Festival plný lokálních potravin.', 'FESTIVAL', 60, 50.0795, 12.3701, 'https://images.unsplash.com/photo-1533900298318-6b8da08a523e?auto=format&fit=crop&w=400&q=80');
+VALUES (2, 'Chebské farmářské trhy', 'Festival plný lokálních potravin.', 'FESTIVAL', 60, 50.0795, 12.3701, 'https://picsum.photos/seed/krusno6/400/300');
 INSERT INTO locations (name, lat, lng) VALUES ('Abertamy', 50.368, 12.818);
 INSERT INTO locations (name, lat, lng) VALUES ('Bečov nad Teplou', 50.084, 12.839);
 INSERT INTO locations (name, lat, lng) VALUES ('Bochov', 50.149, 13.048);
@@ -81,12 +81,12 @@ INSERT INTO locations (name, lat, lng) VALUES ('Mariánské Lázně', 49.973, 12
 INSERT INTO locations (name, lat, lng) VALUES ('Plesná', 50.222, 12.35);
 INSERT INTO locations (name, lat, lng) VALUES ('Skalná', 50.17, 12.36);
 INSERT INTO locations (name, lat, lng) VALUES ('Teplá', 49.977, 12.863);
-INSERT INTO activity_pois (location_id, name, description, category, est_duration_mins, lat, lng, image_url) VALUES ((SELECT id FROM locations WHERE name = 'Mariánské Lázně' LIMIT 1), 'Zpívající fontána', 'Unikátní fontána hrající světoznámé skladby.', 'SIGHTSEEING', 30, 49.9765, 12.7068, 'https://images.unsplash.com/photo-1543158021-3e3c0b0213d4?auto=format&fit=crop&w=400&q=80');
-INSERT INTO activity_pois (location_id, name, description, category, est_duration_mins, lat, lng, image_url) VALUES ((SELECT id FROM locations WHERE name = 'Mariánské Lázně' LIMIT 1), 'Kolonáda Maxima Gorkého', 'Hlavní lázeňská kolonáda s prameny.', 'SIGHTSEEING', 60, 49.9772, 12.7075, 'https://images.unsplash.com/photo-1572004245941-8608eb82f1b7?auto=format&fit=crop&w=400&q=80');
-INSERT INTO activity_pois (location_id, name, description, category, est_duration_mins, lat, lng, image_url) VALUES ((SELECT id FROM locations WHERE name = 'Mariánské Lázně' LIMIT 1), 'Park Boheminium', 'Miniatury významných českých památek.', 'PARK', 120, 49.972, 12.718, 'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=400&q=80');
-INSERT INTO activity_pois (location_id, name, description, category, est_duration_mins, lat, lng, image_url) VALUES ((SELECT id FROM locations WHERE name = 'Loket' LIMIT 1), 'Hrad Loket', 'Gotický královský hrad tyčící se nad řekou Ohří.', 'SIGHTSEEING', 120, 50.1873, 12.754, 'https://images.unsplash.com/photo-1584348003666-48c9038ba7b8?auto=format&fit=crop&w=400&q=80');
-INSERT INTO activity_pois (location_id, name, description, category, est_duration_mins, lat, lng, image_url) VALUES ((SELECT id FROM locations WHERE name = 'Bečov nad Teplou' LIMIT 1), 'Zámek Bečov a Relikviář sv. Maura', 'Unikátní památka celoevropského významu.', 'SIGHTSEEING', 90, 50.0847, 12.8392, 'https://images.unsplash.com/photo-1590483864508-466d3cfc64a3?auto=format&fit=crop&w=400&q=80');
-INSERT INTO activity_pois (location_id, name, description, category, est_duration_mins, lat, lng, image_url) VALUES ((SELECT id FROM locations WHERE name = 'Jáchymov' LIMIT 1), 'Královská mincovna', 'Muzeum mapující těžbu stříbra a ražbu tolarů.', 'SIGHTSEEING', 60, 50.3662, 12.9135, 'https://images.unsplash.com/photo-1555529902-5261145633bf?auto=format&fit=crop&w=400&q=80');
-INSERT INTO activity_pois (location_id, name, description, category, est_duration_mins, lat, lng, image_url) VALUES ((SELECT id FROM locations WHERE name = 'Sokolov' LIMIT 1), 'Sokolovský zámek', 'Klasicistní zámek v centru města.', 'SIGHTSEEING', 60, 50.1805, 12.6415, 'https://images.unsplash.com/photo-1533154683836-84ea7a0bc310?auto=format&fit=crop&w=400&q=80');
-INSERT INTO activity_pois (location_id, name, description, category, est_duration_mins, lat, lng, image_url) VALUES ((SELECT id FROM locations WHERE name = 'Karlovy Vary' LIMIT 1), 'Mlýnská kolonáda', 'Největší z karlovarských kolonád se 124 sloupy.', 'SIGHTSEEING', 45, 50.2255, 12.8805, 'https://images.unsplash.com/photo-1563200925-8ba948b89417?auto=format&fit=crop&w=400&q=80');
-INSERT INTO activity_pois (location_id, name, description, category, est_duration_mins, lat, lng, image_url) VALUES ((SELECT id FROM locations WHERE name = 'Františkovy Lázně' LIMIT 1), 'Socha Františka', 'Symbol Františkových Lázní pro štěstí.', 'SIGHTSEEING', 20, 50.1202, 12.351, 'https://images.unsplash.com/photo-1616428751515-3b95dc046cd4?auto=format&fit=crop&w=400&q=80');
+INSERT INTO activity_pois (location_id, name, description, category, est_duration_mins, lat, lng, image_url) VALUES ((SELECT id FROM locations WHERE name = 'Mariánské Lázně' LIMIT 1), 'Zpívající fontána', 'Unikátní fontána hrající světoznámé skladby.', 'SIGHTSEEING', 30, 49.9765, 12.7068, 'https://picsum.photos/seed/krusno7/400/300');
+INSERT INTO activity_pois (location_id, name, description, category, est_duration_mins, lat, lng, image_url) VALUES ((SELECT id FROM locations WHERE name = 'Mariánské Lázně' LIMIT 1), 'Kolonáda Maxima Gorkého', 'Hlavní lázeňská kolonáda s prameny.', 'SIGHTSEEING', 60, 49.9772, 12.7075, 'https://picsum.photos/seed/krusno8/400/300');
+INSERT INTO activity_pois (location_id, name, description, category, est_duration_mins, lat, lng, image_url) VALUES ((SELECT id FROM locations WHERE name = 'Mariánské Lázně' LIMIT 1), 'Park Boheminium', 'Miniatury významných českých památek.', 'PARK', 120, 49.972, 12.718, 'https://picsum.photos/seed/krusno9/400/300');
+INSERT INTO activity_pois (location_id, name, description, category, est_duration_mins, lat, lng, image_url) VALUES ((SELECT id FROM locations WHERE name = 'Loket' LIMIT 1), 'Hrad Loket', 'Gotický královský hrad tyčící se nad řekou Ohří.', 'SIGHTSEEING', 120, 50.1873, 12.754, 'https://picsum.photos/seed/krusno10/400/300');
+INSERT INTO activity_pois (location_id, name, description, category, est_duration_mins, lat, lng, image_url) VALUES ((SELECT id FROM locations WHERE name = 'Bečov nad Teplou' LIMIT 1), 'Zámek Bečov a Relikviář sv. Maura', 'Unikátní památka celoevropského významu.', 'SIGHTSEEING', 90, 50.0847, 12.8392, 'https://picsum.photos/seed/krusno11/400/300');
+INSERT INTO activity_pois (location_id, name, description, category, est_duration_mins, lat, lng, image_url) VALUES ((SELECT id FROM locations WHERE name = 'Jáchymov' LIMIT 1), 'Královská mincovna', 'Muzeum mapující těžbu stříbra a ražbu tolarů.', 'SIGHTSEEING', 60, 50.3662, 12.9135, 'https://picsum.photos/seed/krusno12/400/300');
+INSERT INTO activity_pois (location_id, name, description, category, est_duration_mins, lat, lng, image_url) VALUES ((SELECT id FROM locations WHERE name = 'Sokolov' LIMIT 1), 'Sokolovský zámek', 'Klasicistní zámek v centru města.', 'SIGHTSEEING', 60, 50.1805, 12.6415, 'https://picsum.photos/seed/krusno13/400/300');
+INSERT INTO activity_pois (location_id, name, description, category, est_duration_mins, lat, lng, image_url) VALUES ((SELECT id FROM locations WHERE name = 'Karlovy Vary' LIMIT 1), 'Mlýnská kolonáda', 'Největší z karlovarských kolonád se 124 sloupy.', 'SIGHTSEEING', 45, 50.2255, 12.8805, 'https://picsum.photos/seed/krusno14/400/300');
+INSERT INTO activity_pois (location_id, name, description, category, est_duration_mins, lat, lng, image_url) VALUES ((SELECT id FROM locations WHERE name = 'Františkovy Lázně' LIMIT 1), 'Socha Františka', 'Symbol Františkových Lázní pro štěstí.', 'SIGHTSEEING', 20, 50.1202, 12.351, 'https://picsum.photos/seed/krusno15/400/300');
