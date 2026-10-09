@@ -105,6 +105,19 @@
                 }
             }
             
+            // Nedovolí ani fyzicky ponechat vybraný zpětný čas (okamžitě ho přenastaví zpět)
+            timeFromInput.addEventListener('change', (e) => {
+                if (dateInput.value === todayStr) {
+                    const now = new Date();
+                    const currentHours = now.getHours().toString().padStart(2, '0');
+                    const currentMinutes = now.getMinutes().toString().padStart(2, '0');
+                    const currentTime = `${currentHours}:${currentMinutes}`;
+                    if (e.target.value < currentTime) {
+                        e.target.value = currentTime;
+                    }
+                }
+            });
+            
             dateInput.addEventListener('change', updateMinTime);
             updateMinTime(); // Inicializace při načtení
             
