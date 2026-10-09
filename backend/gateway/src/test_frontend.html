@@ -84,6 +84,7 @@
             const todayStr = new Date().toISOString().split('T')[0];
             const dateInput = document.getElementById('date-input');
             const timeFromInput = document.getElementById('time-from');
+            const timeToInput = document.getElementById('time-to');
             
             dateInput.value = todayStr;
             dateInput.min = todayStr; // Zabrání výběru data v minulosti
@@ -115,6 +116,22 @@
                     if (e.target.value < currentTime) {
                         e.target.value = currentTime;
                     }
+                }
+                
+                // Zajistí, že "Čas Do" není menší než "Čas Od"
+                if (timeToInput.value <= e.target.value) {
+                    timeToInput.value = e.target.value;
+                }
+            });
+
+            timeToInput.addEventListener('change', (e) => {
+                // "Čas Do" nesmí být menší než "Čas Od"
+                if (e.target.value <= timeFromInput.value) {
+                    e.target.value = timeFromInput.value;
+                }
+                // Maximální hodnota do půlnoci (což standardní input type="time" omezuje na 23:59, ale raději to podchytíme)
+                if (e.target.value > "23:59") {
+                    e.target.value = "23:59";
                 }
             });
             
