@@ -32,13 +32,15 @@ import urllib.error
 import urllib.request
 import urllib.parse
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
 # Přidáme parent složku do cesty, abychom mohli importovat z app/
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from app.models import Location, ActivityPOI
+from app.models import Location, ActivityPOI, Dataset
 
 # URL databáze (přečte z prostředí nebo použije výchozí pro lokální spuštění)
 DATABASE_URL = os.getenv("DATABASE_URL", "mysql+pymysql://api_user:api_password@localhost:3306/krusnoplan")
@@ -211,6 +213,20 @@ def fetch_layer(cfg):
             break
         offset += len(batch)
     return features
+
+
+def fetch_dataset_meta(cfg):
+    """Název, odkaz na datazapad.cz a licence datové sady (z položky ArcGIS Online, ze které DataZápad čerpá)."""
+    svc_url = ARCGIS_BASE + urllib.parse.quote(cfg["service"]) + "/FeatureServer"
+    item_id = http_json(svc_url + "?f=json").get("serviceItemId")
+    meta = {"service": cfg["service"], "item_id": item_id, "title": layer_label(cfg), "url": None, "license": None}
+    if item_id:
+        item = http_json(f"https://www.arcgis.com/sharing/rest/content/items/{item_id}?f=json")
+        lic = (item.get("licenseInfo") or "")
+        meta["title"] = item.get("title") or meta["title"]
+        meta["url"] = f"https://www.datazapad.cz/datasets/{item_id}"
+        meta["license"] = "CC0 1.0" if "CC0" in lic else ("CC BY 4.0" if ("CC BY 4.0" in lic or "by/4.0" in lic) else None)
+    return meta
 
 
 # --- Přístupnost ------------------------------------------------------------
@@ -555,6 +571,9 @@ def ensure_schema():
         "ALTER TABLE activity_pois ADD COLUMN IF NOT EXISTS address VARCHAR(255)",
         "ALTER TABLE activity_pois ADD COLUMN IF NOT EXISTS season_from TINYINT",
         "ALTER TABLE activity_pois ADD COLUMN IF NOT EXISTS season_to TINYINT",
+        """CREATE TABLE IF NOT EXISTS datasets (
+            service VARCHAR(150) PRIMARY KEY, title VARCHAR(255), item_id VARCHAR(64), url VARCHAR(255),
+            license VARCHAR(50), records_total INT, places_used INT, imported_at DATETIME)""",
         "CREATE INDEX IF NOT EXISTS idx_external_id ON activity_pois (external_id)",
     ]
     with engine.begin() as conn:
@@ -589,12 +608,17 @@ def run_import(with_images=True, dry_run=False):
     print("⏳ Stahuji turistické cíle z DataZápad (ArcGIS REST API)...")
     pois = []
     fetched_services = set()  # jen u úspěšně stažených vrstev smíme mazat zaniklé záznamy
+    datasets = {}
     for cfg in LAYERS:
         try:
             feats = fetch_layer(cfg)
             converted = [p for p in (feature_to_poi(cfg, f) for f in feats) if p]
             pois.extend(converted)
             fetched_services.add(cfg["service"])
+            try:
+                datasets[cfg["service"]] = dict(fetch_dataset_meta(cfg), records_total=len(feats))
+            except Exception as e:
+                print(f"   ⚠ {cfg['service']}: metadata datové sady se nepodařilo načíst ({e})")
             print(f"   ✔ {cfg['service']}: {len(converted)} z {len(feats)} míst (zbytek nepřístupný / mimo plán)")
         except Exception as e:
             print(f"   ✖ {cfg['service']}: chyba {e}")
@@ -625,12 +649,15 @@ def run_import(with_images=True, dry_run=False):
 
         added = updated = skipped = 0
         created = {}
+        used_per_service = {}
         for poi in pois:
             # Duplicita s ručně zadaným místem (např. "Hrad Loket") -> ruční záznam má přednost
             if any(haversine_m(poi["lat"], poi["lng"], m.lat, m.lng) < 120 and (tokens(poi["name"]) & tokens(m.name))
                    for m in manual):
                 skipped += 1
                 continue
+            svc = poi["external_id"].split(":")[0]
+            used_per_service[svc] = used_per_service.get(svc, 0) + 1
 
             loc = resolve_location(db, poi, loc_cache, created)
             fields = {k: v for k, v in poi.items() if k not in ("obec", "image_url")}
@@ -662,6 +689,11 @@ def run_import(with_images=True, dry_run=False):
             pts = [(p["lat"], p["lng"]) for p in pois if p["obec"] and p["obec"].lower() == key]
             loc.lat = sum(p[0] for p in pts) / len(pts)
             loc.lng = sum(p[1] for p in pts) / len(pts)
+
+        # Metadata datových sad (zdroj u míst + stránka "O datech")
+        imported_at = datetime.now(ZoneInfo("Europe/Prague")).replace(tzinfo=None)
+        for svc, meta in datasets.items():
+            db.merge(Dataset(**meta, places_used=used_per_service.get(svc, 0), imported_at=imported_at))
 
         db.commit()
         print(f"🎉 Hotovo: přidáno {added}, aktualizováno {updated}, smazáno {removed}, "

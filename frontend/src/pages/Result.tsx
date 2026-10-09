@@ -56,6 +56,15 @@ function PoiItem({ item, order }: { item: ItineraryItem; order: number }) {
                     Web místa
                 </a>
             )}
+            {item.source && (
+                <p className="mt-3 pt-2 border-t border-gray-100 text-xs text-gray-500">
+                    Zdroj:{' '}
+                    {item.source.url ? (
+                        <a href={item.source.url} target="_blank" rel="noopener noreferrer" className="underline hover:text-primary">{item.source.name}</a>
+                    ) : item.source.name}
+                    {item.source.license ? ` (${item.source.license})` : ''}
+                </p>
+            )}
         </div>
     );
 }

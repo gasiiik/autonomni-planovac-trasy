@@ -125,6 +125,11 @@ if ($request_uri === '/api/locations' && $method === 'GET') {
     forward_to_engine('/internal/locations');
 }
 
+// Použité datové sady DataZápad (stránka "O datech")
+if ($request_uri === '/api/datasets' && $method === 'GET') {
+    forward_to_engine('/internal/datasets');
+}
+
 http_response_code(404);
 echo json_encode(["error" => "Endpoint not found"]);
 ?>

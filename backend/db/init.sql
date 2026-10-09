@@ -39,6 +39,17 @@ CREATE TABLE IF NOT EXISTS activity_pois (
     FOREIGN KEY (location_id) REFERENCES locations(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS datasets (
+    service VARCHAR(150) PRIMARY KEY,         -- název ArcGIS služby = prefix activity_pois.external_id
+    title VARCHAR(255),
+    item_id VARCHAR(64),
+    url VARCHAR(255),                         -- stránka datové sady na datazapad.cz
+    license VARCHAR(50),
+    records_total INT,                        -- záznamů v datové sadě
+    places_used INT,                          -- míst, která po zpracování používá plánovač
+    imported_at DATETIME
+);
+
 INSERT INTO users (username, password_hash) VALUES ('admin', '$2y$10$w6z/6G2gQdYtU3r5S0E.e.DqzqRXXrM6Y4O1/8G9E9X4E0fT8H3g6');
 
 -- Karlovarský kraj: Pár měst jako ukázka (s výchozím bodem v centru)

@@ -31,6 +31,7 @@ export default function Layout() {
                         
                         <nav className="flex items-center gap-6 font-medium text-sm text-white">
                             <Link to="/" className="hover:text-accent transition-colors hidden sm:block">Domů</Link>
+                            <Link to="/o-datech" className="hover:text-accent transition-colors hidden sm:block">O datech</Link>
                             <Link to="/wizard" className="bg-accent text-primary-dark hover:bg-yellow-400 transition-colors px-5 py-2 rounded-full font-bold shadow-sm whitespace-nowrap">
                                 Naplánovat výlet
                             </Link>
@@ -47,8 +48,19 @@ export default function Layout() {
             <main className="flex-grow bg-[#FFFFFF]">
                 <Outlet />
             </main>
-            <footer className="bg-primary-dark text-white p-6 text-center">
-                <p>&copy; {new Date().getFullYear()} KrušnoPlán. Všechna práva vyhrazena.</p>
+            <footer className="bg-primary-dark text-white p-6 text-center space-y-2">
+                <p className="text-sm text-white/90">
+                    Turistické cíle pochází z otevřených dat Karlovarského kraje –{' '}
+                    <a href="https://www.datazapad.cz/" target="_blank" rel="noopener noreferrer" className="underline hover:text-accent">DataZápad</a>
+                    {' '}(licence CC BY 4.0 a CC0).{' '}
+                    <Link to="/o-datech" className="underline hover:text-accent">Přehled použitých dat</Link>
+                </p>
+                <p className="text-xs text-white/70">
+                    Počasí: Open-Meteo · Fotky: Wikipedie a Wikimedia Commons · Mapa: © přispěvatelé OpenStreetMap
+                </p>
+                <p className="text-xs text-white/70">
+                    &copy; {new Date().getFullYear()} KrušnoPlán · Prototyp z Hackathonu otevřených dat Karlovarského kraje 2026. Není oficiální službou Karlovarského kraje ani KIC KK.
+                </p>
             </footer>
         </div>
     )

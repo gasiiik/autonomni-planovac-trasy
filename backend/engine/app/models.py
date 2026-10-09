@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, ForeignKey, Text
+from sqlalchemy import Column, Integer, String, Float, ForeignKey, Text, DateTime
 from sqlalchemy.orm import relationship
 from .database import Base
 
@@ -39,3 +39,16 @@ class ActivityPOI(Base):
     season_to = Column(Integer)   # měsíc 1-12, do kdy (může přetéct přes Nový rok, např. 11 -> 3)
     
     location = relationship("Location")
+
+
+class Dataset(Base):
+    """Metadata datové sady z DataZápad - pro uvedení zdroje u míst a stránku "O datech"."""
+    __tablename__ = "datasets"
+    service = Column(String(150), primary_key=True) # název ArcGIS služby = prefix ActivityPOI.external_id
+    title = Column(String(255))
+    item_id = Column(String(64))
+    url = Column(String(255)) # stránka datové sady na datazapad.cz
+    license = Column(String(50))
+    records_total = Column(Integer) # záznamů v datové sadě
+    places_used = Column(Integer)   # míst, která po zpracování používá plánovač
+    imported_at = Column(DateTime)

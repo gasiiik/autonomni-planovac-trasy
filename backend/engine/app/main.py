@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, Depends, HTTPException
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
@@ -9,9 +10,15 @@ import urllib.request
 import json
 
 from .database import get_db
-from .models import Location, ActivityPOI
+from .models import Location, ActivityPOI, Dataset
+from . import auto_import
 
-app = FastAPI(title="KrušnoPlán Python Engine - Pokročilé Trasování")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    auto_import.start() # při startu doplní / obnoví data z DataZápad (na pozadí)
+    yield
+
+app = FastAPI(title="KrušnoPlán Python Engine - Pokročilé Trasování", lifespan=lifespan)
 
 # Kontejner běží v UTC, uživatelé plánují v českém čase
 LOCAL_TZ = ZoneInfo("Europe/Prague")
@@ -103,6 +110,35 @@ def get_weather_info(lat: float, lng: float, t_from: datetime = None, t_to: date
 def get_locations(db: Session = Depends(get_db)):
     return db.query(Location).all()
 
+@app.get("/internal/datasets")
+def get_datasets(db: Session = Depends(get_db)):
+    """Přehled použitých datových sad z DataZápad pro stránku "O datech"."""
+    try:
+        datasets = db.query(Dataset).order_by(Dataset.places_used.desc()).all()
+    except Exception:
+        db.rollback()
+        datasets = [] # tabulka ještě neexistuje (první start, import běží)
+    manual = db.query(ActivityPOI).filter(ActivityPOI.source != "DATAZAPAD").count()
+    return {
+        "datasets": [{
+            "title": d.title, "url": d.url, "license": d.license,
+            "records_total": d.records_total, "places_used": d.places_used,
+        } for d in datasets],
+        "places_from_datazapad": sum(d.places_used or 0 for d in datasets),
+        "places_manual": manual,
+        "last_import": max((d.imported_at for d in datasets if d.imported_at), default=None),
+        "import_running": auto_import.state["running"],
+    }
+
+def dataset_sources(db: Session) -> dict:
+    """external_id prefix (ArcGIS služba) -> uvedení zdroje u místa"""
+    try:
+        return {d.service: {"name": f"DataZápad – {d.title}", "url": d.url, "license": d.license}
+                for d in db.query(Dataset).all()}
+    except Exception:
+        db.rollback()
+        return {}
+
 @app.post("/internal/planner/generate")
 def generate_plan(req: PlanRequest, db: Session = Depends(get_db)):
     try:
@@ -152,6 +188,8 @@ def generate_plan(req: PlanRequest, db: Session = Depends(get_db)):
             pois = indoor_pois
         else:
             weather_message = "V destinaci prší/sněží, ale pro zvolené preference nemáme vnitřní alternativy – vezměte si deštník!"
+
+    sources = dataset_sources(db)
 
     # Klonování listu POI pro algoritmus "Nejbližší soused" (Nearest Neighbor)
     unvisited = pois[:]
@@ -327,6 +365,7 @@ def generate_plan(req: PlanRequest, db: Session = Depends(get_db)):
                 "address": poi.address,
                 "website": poi.website,
                 "description": poi.description,
+                "source": sources.get((poi.external_id or "").split(":")[0]) if poi.source == "DATAZAPAD" else None,
                 "estimated_cost": poi.price_estimated or 0 # NOVÉ
             })
             total_estimated_cost += poi.price_estimated or 0 # NOVÉ

@@ -42,6 +42,13 @@ export interface ItineraryItem {
     address?: string | null;
     website?: string | null;
     description?: string | null;
+    source?: DataSource | null; // u míst z DataZápad
+}
+
+export interface DataSource {
+    name: string;
+    url: string | null;
+    license: string | null;
 }
 
 export interface PlanResponse {
@@ -57,6 +64,22 @@ export interface PlanResponse {
     remaining_free_time_mins: number;
     total_planned_time: number;
     total_estimated_cost: number;
+}
+
+export interface DatasetInfo {
+    title: string;
+    url: string | null;
+    license: string | null;
+    records_total: number | null;
+    places_used: number | null;
+}
+
+export interface DatasetsResponse {
+    datasets: DatasetInfo[];
+    places_from_datazapad: number;
+    places_manual: number;
+    last_import: string | null;
+    import_running: boolean;
 }
 
 export interface Location {

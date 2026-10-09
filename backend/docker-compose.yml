@@ -31,6 +31,9 @@ services:
       - ./engine:/app
     environment:
       - DATABASE_URL=mysql+pymysql://api_user:api_password@db/krusnoplan
+      - AUTO_IMPORT=1                # při startu stáhne data z DataZápad, pokud chybí nebo jsou starší než 7 dní
+      - AUTO_IMPORT_MAX_AGE_DAYS=7
+      - PYTHONUNBUFFERED=1           # průběh importu hned v `docker compose logs`
     depends_on:
       - db
 

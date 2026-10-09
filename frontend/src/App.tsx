@@ -3,6 +3,7 @@ import Layout from './layouts/Layout';
 import Home from './pages/Home';
 import Wizard from './pages/Wizard';
 import Result from './pages/Result';
+import About from './pages/About';
 
 function App() {
   return (
@@ -12,6 +13,7 @@ function App() {
           <Route index element={<Home />} />
           <Route path="wizard" element={<Wizard />} />
           <Route path="result" element={<Result />} />
+          <Route path="o-datech" element={<About />} />
         </Route>
       </Routes>
     </BrowserRouter>
