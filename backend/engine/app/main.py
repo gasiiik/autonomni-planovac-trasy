@@ -68,18 +68,33 @@ def generate_plan(req: PlanRequest, db: Session = Depends(get_db)):
     if not loc:
         raise HTTPException(status_code=404, detail="Lokace nenalezena.")
 
-    itinerary = []
+    # Klonování listu POI pro algoritmus "Nejbližší soused" (Nearest Neighbor)
+    unvisited = pois[:]
+    
     current_time = t_from
     remaining_mins = total_mins
     
     start_lat, start_lng = loc.lat, loc.lng
     curr_lat, curr_lng = start_lat, start_lng
     
-    # Uložení pro frontendovou mapu (Google Maps / Leaflet)
     waypoints_for_map = [{"lat": start_lat, "lng": start_lng, "name": loc.name, "type": "START"}]
+    itinerary = []
 
-    for poi in pois:
-        dist_km = haversine_distance(curr_lat, curr_lng, poi.lat, poi.lng)
+    while unvisited:
+        # Najdi nejbližší památku k aktuální poloze
+        closest_poi = None
+        min_dist = float('inf')
+        
+        for p in unvisited:
+            dist = haversine_distance(curr_lat, curr_lng, p.lat, p.lng)
+            if dist < min_dist:
+                min_dist = dist
+                closest_poi = p
+                
+        poi = closest_poi
+        unvisited.remove(poi)
+
+        dist_km = min_dist
         travel_time = calc_travel_time(dist_km, req.transport_mode)
         
         # Pokud je to OKRUH, musíme si nechat rezervu na návrat

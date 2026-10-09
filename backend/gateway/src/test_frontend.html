@@ -8,7 +8,11 @@
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;800&display=swap" rel="stylesheet">
     <style>
         body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #F8FAFC; }
+        #map { height: 400px; width: 100%; border-radius: 0.5rem; z-index: 1; }
     </style>
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@latest/dist/leaflet-routing-machine.css" />
 </head>
 <body class="text-slate-800 p-8">
     <div class="max-w-4xl mx-auto">
@@ -72,14 +76,25 @@
 
         <div id="results" class="hidden">
             <h2 class="text-xl font-bold mb-4">2. Odpověď z API (Itinerář)</h2>
-            <div id="itinerary" class="space-y-4"></div>
+            <div id="itinerary" class="space-y-4 mb-8"></div>
             
-            <h2 class="text-xl font-bold mb-4 mt-8">3. RAW Waypoints (Pro Google Maps)</h2>
+            <h2 class="text-xl font-bold mb-4">3. Mapa Trasy a Navigace</h2>
+            <div id="map" class="shadow border border-slate-200 mb-4"></div>
+            <a id="nav-btn" href="#" target="_blank" class="block text-center w-full bg-green-600 text-white font-bold py-4 rounded-xl hover:bg-green-700 shadow-lg text-lg mb-8">
+                📍 Spustit navigaci v Google Maps
+            </a>
+            
+            <h2 class="text-xl font-bold mb-4 mt-8">4. RAW Waypoints (Pro vývojáře)</h2>
             <pre id="raw-json" class="bg-slate-900 text-green-400 p-4 rounded-xl text-sm overflow-x-auto"></pre>
         </div>
     </div>
 
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet-routing-machine@latest/dist/leaflet-routing-machine.js"></script>
     <script>
+        let mapInstance = null; // Globální instance mapy
+
         document.addEventListener('DOMContentLoaded', async () => {
             const todayStr = new Date().toISOString().split('T')[0];
             const dateInput = document.getElementById('date-input');
@@ -217,6 +232,60 @@
                         </div>`;
                     }
                 });
+
+                // Vykreslení interaktivní mapy přes Leaflet
+                if (mapInstance) {
+                    mapInstance.remove(); // Smazat starou mapu, pokud existuje
+                }
+                
+                const wps = data.waypoints;
+                if (wps && wps.length > 0) {
+                    // Inicializace mapy na první bod
+                    mapInstance = L.map('map').setView([wps[0].lat, wps[0].lng], 13);
+                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                        attribution: '© OpenStreetMap contributors'
+                    }).addTo(mapInstance);
+
+                    const latlngs = [];
+                    wps.forEach((wp, index) => {
+                        let markerColor = wp.type === 'START' || wp.type === 'END_LOOP' ? 'blue' : 'red';
+                        L.marker([wp.lat, wp.lng]).addTo(mapInstance)
+                         .bindPopup(`<b>${index + 1}. ${wp.name}</b>`);
+                        latlngs.push(L.latLng(wp.lat, wp.lng));
+                    });
+
+                    // Vykreslení REÁLNÉ trasy po silnicích/cestách přes OSRM routing
+                    L.Routing.control({
+                        waypoints: latlngs,
+                        routeWhileDragging: false,
+                        addWaypoints: false,
+                        fitSelectedRoutes: true,
+                        showAlternatives: false,
+                        show: false, // Skryjeme textové navigační instrukce (chceme jen čáru na mapě)
+                        lineOptions: {
+                            styles: [{color: 'indigo', weight: 4}]
+                        },
+                        createMarker: function() { return null; } // Zamezíme duplikování špendlíků
+                    }).addTo(mapInstance);
+                    
+                    // Generování Google Maps navigační URL
+                    // Dokumentace: https://developers.google.com/maps/documentation/urls/get-started#directions-action
+                    let travelModeMaps = 'driving';
+                    if (data.transport_mode === 'WALK') travelModeMaps = 'walking';
+                    if (data.transport_mode === 'BIKE') travelModeMaps = 'bicycling';
+                    
+                    const origin = `${wps[0].lat},${wps[0].lng}`;
+                    const destination = `${wps[wps.length - 1].lat},${wps[wps.length - 1].lng}`;
+                    
+                    let waypointsParam = '';
+                    if (wps.length > 2) {
+                        const midWaypoints = wps.slice(1, -1).map(w => `${w.lat},${w.lng}`).join('|');
+                        waypointsParam = `&waypoints=${midWaypoints}`;
+                    }
+                    
+                    const gmapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}${waypointsParam}&travelmode=${travelModeMaps}`;
+                    document.getElementById('nav-btn').href = gmapsUrl;
+                }
             });
         });
     </script>
