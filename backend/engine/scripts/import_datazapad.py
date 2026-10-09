@@ -378,7 +378,8 @@ def feature_to_poi(cfg, feat):
     a = lower_attrs(feat.get("attributes", {}))
     lat, lng = geometry_to_latlng(feat.get("geometry"))
     name = extract_name(a)
-    if not name or lat is None:
+    # "pramen bez jména" apod. - beze jména místo v plánu nepomůže
+    if not name or lat is None or "bez jména" in name.lower():
         return None
 
     # Pivovary: přeskočíme "létající pivovary" (nemají vlastní provozovnu k návštěvě)

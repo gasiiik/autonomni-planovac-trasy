@@ -6,7 +6,7 @@ KrušnoPlán sestaví celodenní výlet na míru: zadáte datum, časové okno, 
 
 1. **Import dat** – skript [`import_datazapad.py`](backend/engine/scripts/import_datazapad.py) stáhne datové sady z DataZápadu přes ArcGIS REST API a převede je na místa pro plánovač. Z dat čte polohu, popis, adresu, web, **přístupnost** (nepřístupné objekty vynechá, zavřené zámky a kostely nabídne jen jako krátkou zastávku zvenku), **vstupné**, **otevírací dobu** a **sezónu** (koupaliště, lanová centra, rozhledny). Místo uvedené ve více sadách (např. klášter Teplá v NKP i v náboženských památkách) uloží jen jednou. Import lze spouštět opakovaně – data se aktualizují a záznamy, které z DataZápadu zmizely, se smažou.
 2. **Plánovač** ([`main.py`](backend/engine/app/main.py)) skládá trasu od výchozího bodu: vybírá nejbližší vhodné místo, počká na otevření (max. 60 min), oběd naplánuje mezi 11:30 a 14:00, nedá víc než 3 místa stejného typu za den, u okruhu hlídá čas na návrat a při dešti (předpověď Open-Meteo) upřednostní vnitřní aktivity. Když výlet nejde naplánovat, vysvětlí proč.
-3. **Frontend** (React) provede uživatele průvodcem a výsledek zobrazí jako časovou osu s fotkami, adresami a mapou trasy. U každé zastávky uvádí datovou sadu DataZápadu, ze které pochází, a stránka **O datech** ukazuje, kolik míst z které sady aplikace používá a kdy proběhla poslední aktualizace.
+3. **Frontend** (React) provede uživatele průvodcem nebo nabídne tematický výlet na jedno kliknutí. Výsledek zobrazí jako časovou osu s fotkami, adresami, předpovědí počasí u každé zastávky a mapou trasy; plán jde sdílet odkazem, uložit do kalendáře (.ics) nebo vytisknout a ke každé zastávce otevřít navigaci v Mapy.cz. **Mapa míst** ukazuje všechna místa z dat s filtry a každé místo má vlastní stránku s detailem. U každé zastávky uvádí datovou sadu DataZápadu, ze které pochází, a stránka **O datech** ukazuje, kolik míst z které sady aplikace používá a kdy proběhla poslední aktualizace.
 
 ```
 frontend (React, :5173) → PHP gateway (:8080) → Python engine (FastAPI, :8000) → MariaDB
@@ -28,7 +28,7 @@ Všechny sady pocházejí z [Katalogu otevřených dat Karlovarského kraje – 
 | [Památky UNESCO v Karlovarském kraji](https://www.datazapad.cz/datasets/135900efd11e4df1865987b57428eb9f) | 0* | CC BY 4.0 (upraveno) |
 | [Náboženské památky v Karlovarském kraji](https://www.datazapad.cz/datasets/2c9bd5558c4a495c8424a84bc6b370e2) | 20 | CC BY 4.0 (upraveno) |
 | [Hornické a technické památky v Karlovarském kraji](https://www.datazapad.cz/datasets/3727aefc159e47fd8cb9d70432ab7397) | 14 | CC BY 4.0 (upraveno) |
-| [Přístupné prameny v Karlovarském kraji](https://www.datazapad.cz/datasets/92327bf761e14d3c8cd169b7d65fa418) | 124 | CC BY 4.0 (upraveno) |
+| [Přístupné prameny v Karlovarském kraji](https://www.datazapad.cz/datasets/92327bf761e14d3c8cd169b7d65fa418) | 118 | CC BY 4.0 (upraveno) |
 | [Rozhledny v Karlovarském kraji](https://www.datazapad.cz/datasets/2fe4d27ac10341f6bd2b4ea6380a2599) | 23 | CC BY 4.0 (upraveno) |
 | [Jiné atraktivity v Karlovarském kraji](https://www.datazapad.cz/datasets/1e64adf22f8448a693f638c9f1334dc9) | 11 | CC BY 4.0 (upraveno) |
 | [ZOO a zooparky v Karlovarském kraji](https://www.datazapad.cz/datasets/52658b60dacf474f80cf5bb7c8004cc6) | 9 | CC BY 4.0 (upraveno) |

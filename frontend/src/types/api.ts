@@ -43,6 +43,41 @@ export interface ItineraryItem {
     website?: string | null;
     description?: string | null;
     source?: DataSource | null; // u míst z DataZápad
+    weather?: Weather | null;   // předpověď na začátek návštěvy
+    poi_id?: number;
+    indoor?: boolean;
+}
+
+export interface Weather {
+    code: number; // WMO kód počasí
+    temp: number | null;
+}
+
+export interface Place {
+    id: number;
+    name: string;
+    category: Category;
+    lat: number;
+    lng: number;
+    image_url: string | null;
+    price: number;
+    indoor: boolean;
+    family_friendly: boolean;
+    difficulty: string;
+    tags: string[];
+    source: DataSource | null;
+}
+
+export interface PlaceDetail extends Place {
+    description: string | null;
+    address: string | null;
+    website: string | null;
+    open_time: string | null;
+    close_time: string | null;
+    season_from: number | null;
+    season_to: number | null;
+    est_duration_mins: number | null;
+    nearest_location: { id: number; name: string; distance_km: number };
 }
 
 export interface DataSource {

@@ -1,4 +1,4 @@
-import type { DatasetsResponse, Location, PlanRequest, PlanResponse } from '../types/api';
+import type { DatasetsResponse, Location, Place, PlaceDetail, PlanRequest, PlanResponse } from '../types/api';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080/api';
 
@@ -25,6 +25,18 @@ export const fetchLocations = async (): Promise<Location[]> => {
 export const fetchDatasets = async (): Promise<DatasetsResponse> => {
     const res = await fetch(`${API_URL}/datasets`);
     if (!res.ok) throw await readError(res, 'Nepodařilo se načíst přehled dat');
+    return await res.json();
+}
+
+export const fetchPlaces = async (): Promise<Place[]> => {
+    const res = await fetch(`${API_URL}/places`);
+    if (!res.ok) throw await readError(res, 'Nepodařilo se načíst místa');
+    return await res.json();
+}
+
+export const fetchPlace = async (id: number): Promise<PlaceDetail> => {
+    const res = await fetch(`${API_URL}/places/${id}`);
+    if (!res.ok) throw await readError(res, 'Nepodařilo se načíst místo');
     return await res.json();
 }
 

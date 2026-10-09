@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import type { ChangeEvent, FormEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import type { Category, Location, PlanRequest } from '../types/api';
 import { fetchLocations } from '../services/apiClient';
-import { CATEGORY_ICONS, DIFFICULTY_LABELS, TRANSPORT_LABELS } from '../constants';
+import { CATEGORY_ICONS, DIFFICULTY_LABELS, TRANSPORT_ICONS, TRANSPORT_LABELS } from '../constants';
+import { defaultTimes, localDate, resultUrl } from '../utils/plan';
 
 const STEPS = 6;
 
@@ -23,21 +24,6 @@ const FOOD_PREFERENCES = [
 
 const inputClass = 'w-full border border-gray-300 rounded-xl p-3 focus:outline-none focus:ring-2 focus:ring-primary';
 
-const pad = (n: number) => String(n).padStart(2, '0');
-const localDate = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-
-// Backend nedovolí plánovat do minulosti -> dnes začínáme nejdřív příští celou hodinu
-function defaultTimes() {
-    const now = new Date();
-    if (now.getHours() >= 20) {
-        const tomorrow = new Date(now);
-        tomorrow.setDate(now.getDate() + 1);
-        return { date: localDate(tomorrow), time_from: '09:00', time_to: '18:00' };
-    }
-    const from = Math.max(9, now.getHours() + 1);
-    return { date: localDate(now), time_from: `${pad(from)}:00`, time_to: `${pad(Math.min(23, Math.max(from + 4, 18)))}:00` };
-}
-
 interface WizardForm {
     location_id: string;
     date: string;
@@ -55,19 +41,21 @@ interface WizardForm {
     has_children: boolean;
 }
 
-function initialForm(): WizardForm {
+function initialForm(presetLocation: string | null): WizardForm {
     // Návrat z výsledku přes "Upravit výlet" -> předvyplníme poslední zadání
     try {
         const saved = sessionStorage.getItem('wizardForm');
         if (saved) {
             const form: WizardForm = JSON.parse(saved);
-            return form.date < localDate(new Date()) ? { ...form, ...defaultTimes() } : form;
+            const fresh = form.date < localDate(new Date()) ? { ...form, ...defaultTimes() } : form;
+            // "Naplánovat výlet odsud" z detailu místa má přednost před posledním zadáním
+            return presetLocation ? { ...fresh, location_id: presetLocation } : fresh;
         }
     } catch {
         // poškozená data v session storage ignorujeme
     }
     return {
-        location_id: '',
+        location_id: presetLocation ?? '',
         ...defaultTimes(),
         transport_mode: 'CAR',
         route_type: 'LOOP',
@@ -103,11 +91,12 @@ function toPlanRequest(f: WizardForm): PlanRequest {
 
 export default function Wizard() {
     const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
     const [step, setStep] = useState(1);
     const [locations, setLocations] = useState<Location[]>([]);
     const [locationsError, setLocationsError] = useState('');
     const [stepError, setStepError] = useState('');
-    const [formData, setFormData] = useState<WizardForm>(initialForm);
+    const [formData, setFormData] = useState<WizardForm>(() => initialForm(searchParams.get('location')));
 
     useEffect(() => {
         fetchLocations()
@@ -149,8 +138,7 @@ export default function Wizard() {
 
     const handleSubmit = () => {
         sessionStorage.setItem('wizardForm', JSON.stringify(formData));
-        sessionStorage.setItem('planRequest', JSON.stringify(toPlanRequest(formData)));
-        navigate('/result');
+        navigate(resultUrl(toPlanRequest(formData)));
     };
 
     const onSubmit = (e: FormEvent) => {
@@ -212,11 +200,12 @@ export default function Wizard() {
                             </div>
                             <div>
                                 <label className="block text-primary-dark mb-2">Způsob dopravy</label>
-                                <div className="flex flex-wrap gap-4">
+                                <div className="grid grid-cols-3 gap-3">
                                     {(['CAR', 'BIKE', 'WALK'] as const).map(mode => (
-                                        <label key={mode} className="flex items-center space-x-2">
-                                            <input type="radio" name="transport_mode" value={mode} checked={formData.transport_mode === mode} onChange={handleChange} className="text-primary focus:ring-primary" />
-                                            <span>{TRANSPORT_LABELS[mode]}</span>
+                                        <label key={mode} className={`flex flex-col items-center gap-1 p-4 rounded-2xl border-2 cursor-pointer transition ${formData.transport_mode === mode ? 'border-primary bg-secondary' : 'border-gray-200 hover:border-primary'}`}>
+                                            <input type="radio" name="transport_mode" value={mode} checked={formData.transport_mode === mode} onChange={handleChange} className="sr-only" />
+                                            <span className="text-4xl">{TRANSPORT_ICONS[mode]}</span>
+                                            <span className="font-semibold">{TRANSPORT_LABELS[mode]}</span>
                                         </label>
                                     ))}
                                 </div>
@@ -242,16 +231,19 @@ export default function Wizard() {
                         <div className="space-y-6">
                             <h2 className="text-2xl font-bold text-primary-dark">Krok 3 – Co chceš zažít?</h2>
                             <p className="text-gray-600">Vyber, co tě zajímá, nebo nic nevybírej a necháš se překvapit.</p>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                {INTERESTS.map(interest => (
-                                    <label key={interest.value} className="flex items-start space-x-3 p-4 border rounded-xl hover:bg-secondary cursor-pointer transition">
-                                        <input type="checkbox" name="interests" value={interest.value} checked={formData.interests.includes(interest.value)} onChange={handleChange} className="text-primary focus:ring-primary h-5 w-5 mt-0.5 rounded" />
-                                        <span>
-                                            <span className="font-semibold">{CATEGORY_ICONS[interest.value]} {interest.label}</span>
-                                            <span className="block text-sm text-gray-500">{interest.hint}</span>
-                                        </span>
-                                    </label>
-                                ))}
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                {INTERESTS.map(interest => {
+                                    const active = formData.interests.includes(interest.value);
+                                    return (
+                                        <label key={interest.value} className={`relative flex flex-col items-center text-center gap-2 p-5 rounded-2xl border-2 cursor-pointer transition ${active ? 'border-primary bg-secondary' : 'border-gray-200 hover:border-primary'}`}>
+                                            <input type="checkbox" name="interests" value={interest.value} checked={active} onChange={handleChange} className="sr-only" />
+                                            {active && <span className="absolute top-2 right-3 text-primary font-bold">✓</span>}
+                                            <span className="text-5xl">{CATEGORY_ICONS[interest.value]}</span>
+                                            <span className="font-bold text-primary-dark">{interest.label}</span>
+                                            <span className="text-sm text-gray-500">{interest.hint}</span>
+                                        </label>
+                                    );
+                                })}
                             </div>
                         </div>
                     )}

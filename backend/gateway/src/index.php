@@ -125,6 +125,14 @@ if ($request_uri === '/api/locations' && $method === 'GET') {
     forward_to_engine('/internal/locations');
 }
 
+// Místa pro mapu a detail místa
+if ($request_uri === '/api/places' && $method === 'GET') {
+    forward_to_engine('/internal/places');
+}
+if (preg_match('#^/api/places/(\d+)$#', $request_uri, $m) && $method === 'GET') {
+    forward_to_engine('/internal/places/' . $m[1]);
+}
+
 // Použité datové sady DataZápad (stránka "O datech")
 if ($request_uri === '/api/datasets' && $method === 'GET') {
     forward_to_engine('/internal/datasets');

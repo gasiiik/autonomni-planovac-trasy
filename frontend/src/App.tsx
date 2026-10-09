@@ -4,6 +4,8 @@ import Home from './pages/Home';
 import Wizard from './pages/Wizard';
 import Result from './pages/Result';
 import About from './pages/About';
+import MapPage from './pages/MapPage';
+import PlaceDetail from './pages/PlaceDetail';
 
 function App() {
   return (
@@ -14,6 +16,8 @@ function App() {
           <Route path="wizard" element={<Wizard />} />
           <Route path="result" element={<Result />} />
           <Route path="o-datech" element={<About />} />
+          <Route path="mapa" element={<MapPage />} />
+          <Route path="misto/:id" element={<PlaceDetail />} />
         </Route>
       </Routes>
     </BrowserRouter>

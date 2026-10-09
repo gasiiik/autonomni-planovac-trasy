@@ -75,36 +75,30 @@ def in_season(poi, day: datetime) -> bool:
         return poi.season_from <= day.month <= poi.season_to
     return day.month >= poi.season_from or day.month <= poi.season_to  # sezóna přes Nový rok
 
-def get_weather_info(lat: float, lng: float, t_from: datetime = None, t_to: datetime = None):
-    # Dynamické plánování počasí přes Open-Meteo API (hodinová předpověď pro plánovaný čas)
+def get_weather_info(lat: float, lng: float, t_from: datetime, t_to: datetime):
+    """Hodinová předpověď z Open-Meteo pro plánovaný den.
+    Vrací (stav, {hodina: {"code": WMO kód, "temp": °C}}) - stav je BAD_WEATHER, když prší většinu plánovaného času."""
     try:
-        if t_from and t_to:
-            day = t_from.strftime("%Y-%m-%d")
-            url = (f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lng}"
-                   f"&hourly=weathercode&timezone=Europe%2FPrague&start_date={day}&end_date={day}")
-        else:
-            url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lng}&current_weather=true"
+        day = t_from.strftime("%Y-%m-%d")
+        url = (f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lng}"
+               f"&hourly=weathercode,temperature_2m&timezone=Europe%2FPrague&start_date={day}&end_date={day}")
         req = urllib.request.Request(url, headers={'User-Agent': 'KrusnoPlan/1.0'})
         response = urllib.request.urlopen(req, timeout=3)
         data = json.loads(response.read().decode('utf-8'))
 
-        if t_from and t_to and "hourly" in data:
-            times = data["hourly"].get("time", [])
-            codes = data["hourly"].get("weathercode", [])
-            window = [c for t, c in zip(times, codes)
-                      if c is not None and t_from.hour <= datetime.fromisoformat(t).hour <= t_to.hour]
-            if not window:
-                return "UNKNOWN"
-            # WMO Kódy: 50+ znamená déšť, sníh, bouřky. Špatné počasí = prší většinu plánovaného času.
-            bad_hours = sum(1 for c in window if c >= 50)
-            return "BAD_WEATHER" if bad_hours * 2 >= len(window) else "GOOD_WEATHER"
-
-        weathercode = data.get("current_weather", {}).get("weathercode", 0)
-        if weathercode >= 50:
-            return "BAD_WEATHER"
-        return "GOOD_WEATHER"
+        hourly = data.get("hourly", {})
+        forecast = {}
+        for t, code, temp in zip(hourly.get("time", []), hourly.get("weathercode", []), hourly.get("temperature_2m", [])):
+            if code is not None:
+                forecast[datetime.fromisoformat(t).hour] = {"code": code, "temp": round(temp) if temp is not None else None}
+        window = [w["code"] for h, w in forecast.items() if t_from.hour <= h <= t_to.hour]
+        if not window:
+            return "UNKNOWN", forecast
+        # WMO Kódy: 50+ znamená déšť, sníh, bouřky. Špatné počasí = prší většinu plánovaného času.
+        bad_hours = sum(1 for c in window if c >= 50)
+        return ("BAD_WEATHER" if bad_hours * 2 >= len(window) else "GOOD_WEATHER"), forecast
     except Exception:
-        return "UNKNOWN"
+        return "UNKNOWN", {}
 
 @app.get("/internal/locations")
 def get_locations(db: Session = Depends(get_db)):
@@ -128,6 +122,38 @@ def get_datasets(db: Session = Depends(get_db)):
         "places_manual": manual,
         "last_import": max((d.imported_at for d in datasets if d.imported_at), default=None),
         "import_running": auto_import.state["running"],
+    }
+
+def poi_summary(p, sources):
+    return {
+        "id": p.id, "name": p.name, "category": p.category, "lat": p.lat, "lng": p.lng,
+        "image_url": p.image_url, "price": p.price_estimated or 0, "indoor": bool(p.indoor),
+        "family_friendly": bool(p.family_friendly), "difficulty": p.difficulty_level,
+        "tags": [t for t in (p.tags or "").split(",") if t],
+        "source": sources.get((p.external_id or "").split(":")[0]) if p.source == "DATAZAPAD" else None,
+    }
+
+@app.get("/internal/places")
+def get_places(db: Session = Depends(get_db)):
+    """Všechna místa pro mapu (bez dlouhých popisů)."""
+    sources = dataset_sources(db)
+    return [poi_summary(p, sources) for p in db.query(ActivityPOI).order_by(ActivityPOI.name).all()]
+
+@app.get("/internal/places/{poi_id}")
+def get_place(poi_id: int, db: Session = Depends(get_db)):
+    p = db.query(ActivityPOI).filter(ActivityPOI.id == poi_id).first()
+    if not p:
+        raise HTTPException(status_code=404, detail="Místo nenalezeno.")
+    # Nejbližší obec, ze které jde naplánovat výlet "odsud"
+    nearest = min(db.query(Location).all(), key=lambda l: haversine_distance(p.lat, p.lng, l.lat, l.lng))
+    return {
+        **poi_summary(p, dataset_sources(db)),
+        "description": p.description, "address": p.address, "website": p.website,
+        "open_time": p.open_time, "close_time": p.close_time,
+        "season_from": p.season_from, "season_to": p.season_to,
+        "est_duration_mins": p.est_duration_mins,
+        "nearest_location": {"id": nearest.id, "name": nearest.name,
+                             "distance_km": round(haversine_distance(p.lat, p.lng, nearest.lat, nearest.lng), 1)},
     }
 
 def dataset_sources(db: Session) -> dict:
@@ -174,7 +200,7 @@ def generate_plan(req: PlanRequest, db: Session = Depends(get_db)):
     pois = [p for p in pois if in_season(p, t_from)]
 
     # 1. Zohlednění počasí
-    weather_status = get_weather_info(loc.lat, loc.lng, t_from, t_to)
+    weather_status, forecast = get_weather_info(loc.lat, loc.lng, t_from, t_to)
     weather_message = "Počasí je ideální pro jakékoliv aktivity."
     if weather_status == "UNKNOWN":
         weather_message = "Předpověď počasí se nepodařilo načíst, plánujeme bez ohledu na počasí."
@@ -366,6 +392,9 @@ def generate_plan(req: PlanRequest, db: Session = Depends(get_db)):
                 "website": poi.website,
                 "description": poi.description,
                 "source": sources.get((poi.external_id or "").split(":")[0]) if poi.source == "DATAZAPAD" else None,
+                "weather": forecast.get(current_time.hour), # předpověď na začátek návštěvy
+                "poi_id": poi.id,
+                "indoor": bool(poi.indoor),
                 "estimated_cost": poi.price_estimated or 0 # NOVÉ
             })
             total_estimated_cost += poi.price_estimated or 0 # NOVÉ
