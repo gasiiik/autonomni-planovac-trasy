@@ -95,7 +95,8 @@
                     const now = new Date();
                     const currentHours = now.getHours().toString().padStart(2, '0');
                     const currentMinutes = now.getMinutes().toString().padStart(2, '0');
-                    timeFromInput.min = `${currentHours}:${currentMinutes}`;
+                    const currentTime = `${currentHours}:${currentMinutes}`;
+                    timeFromInput.min = currentTime;
                     
                     // Pokud je aktuálně nastavený čas v minulosti, posuneme ho na teď
                     if (timeFromInput.value < timeFromInput.min) {
@@ -103,6 +104,14 @@
                     }
                 } else {
                     timeFromInput.removeAttribute('min');
+                }
+                
+                // Zajistíme, aby "Čas Do" dával smysl hned po načtení stránky
+                if (timeToInput.value <= timeFromInput.value) {
+                    let [h, m] = timeFromInput.value.split(':').map(Number);
+                    h += 2; // Automaticky předvyplníme +2 hodiny na výlet
+                    if (h > 23) { h = 23; m = 59; }
+                    timeToInput.value = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
                 }
             }
             
