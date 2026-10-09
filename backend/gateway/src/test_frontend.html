@@ -8,7 +8,11 @@
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;800&display=swap" rel="stylesheet">
     <style>
         body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #F8FAFC; }
+        #map { height: 400px; width: 100%; border-radius: 0.5rem; z-index: 1; }
     </style>
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@latest/dist/leaflet-routing-machine.css" />
 </head>
 <body class="text-slate-800 p-8">
     <div class="max-w-4xl mx-auto">
@@ -72,16 +76,91 @@
 
         <div id="results" class="hidden">
             <h2 class="text-xl font-bold mb-4">2. Odpověď z API (Itinerář)</h2>
-            <div id="itinerary" class="space-y-4"></div>
+            <div id="itinerary" class="space-y-4 mb-8"></div>
             
-            <h2 class="text-xl font-bold mb-4 mt-8">3. RAW Waypoints (Pro Google Maps)</h2>
+            <h2 class="text-xl font-bold mb-4">3. Mapa Trasy a Navigace</h2>
+            <div id="map" class="shadow border border-slate-200 mb-4"></div>
+            <a id="nav-btn" href="#" target="_blank" class="block text-center w-full bg-green-600 text-white font-bold py-4 rounded-xl hover:bg-green-700 shadow-lg text-lg mb-8">
+                📍 Spustit navigaci v Google Maps
+            </a>
+            
+            <h2 class="text-xl font-bold mb-4 mt-8">4. RAW Waypoints (Pro vývojáře)</h2>
             <pre id="raw-json" class="bg-slate-900 text-green-400 p-4 rounded-xl text-sm overflow-x-auto"></pre>
         </div>
     </div>
 
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet-routing-machine@latest/dist/leaflet-routing-machine.js"></script>
     <script>
+        let mapInstance = null; // Globální instance mapy
+
         document.addEventListener('DOMContentLoaded', async () => {
-            document.getElementById('date-input').valueAsDate = new Date();
+            const todayStr = new Date().toISOString().split('T')[0];
+            const dateInput = document.getElementById('date-input');
+            const timeFromInput = document.getElementById('time-from');
+            const timeToInput = document.getElementById('time-to');
+            
+            dateInput.value = todayStr;
+            dateInput.min = todayStr; // Zabrání výběru data v minulosti
+            
+            // Funkce pro aktualizaci minimálního času
+            function updateMinTime() {
+                if (dateInput.value === todayStr) {
+                    const now = new Date();
+                    const currentHours = now.getHours().toString().padStart(2, '0');
+                    const currentMinutes = now.getMinutes().toString().padStart(2, '0');
+                    const currentTime = `${currentHours}:${currentMinutes}`;
+                    timeFromInput.min = currentTime;
+                    
+                    // Pokud je aktuálně nastavený čas v minulosti, posuneme ho na teď
+                    if (timeFromInput.value < timeFromInput.min) {
+                        timeFromInput.value = timeFromInput.min;
+                    }
+                } else {
+                    timeFromInput.removeAttribute('min');
+                }
+                
+                // Zajistíme, aby "Čas Do" dával smysl hned po načtení stránky
+                if (timeToInput.value <= timeFromInput.value) {
+                    let [h, m] = timeFromInput.value.split(':').map(Number);
+                    h += 2; // Automaticky předvyplníme +2 hodiny na výlet
+                    if (h > 23) { h = 23; m = 59; }
+                    timeToInput.value = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+                }
+            }
+            
+            // Nedovolí ani fyzicky ponechat vybraný zpětný čas (okamžitě ho přenastaví zpět)
+            timeFromInput.addEventListener('change', (e) => {
+                if (dateInput.value === todayStr) {
+                    const now = new Date();
+                    const currentHours = now.getHours().toString().padStart(2, '0');
+                    const currentMinutes = now.getMinutes().toString().padStart(2, '0');
+                    const currentTime = `${currentHours}:${currentMinutes}`;
+                    if (e.target.value < currentTime) {
+                        e.target.value = currentTime;
+                    }
+                }
+                
+                // Zajistí, že "Čas Do" není menší než "Čas Od"
+                if (timeToInput.value <= e.target.value) {
+                    timeToInput.value = e.target.value;
+                }
+            });
+
+            timeToInput.addEventListener('change', (e) => {
+                // "Čas Do" nesmí být menší než "Čas Od"
+                if (e.target.value <= timeFromInput.value) {
+                    e.target.value = timeFromInput.value;
+                }
+                // Maximální hodnota do půlnoci (což standardní input type="time" omezuje na 23:59, ale raději to podchytíme)
+                if (e.target.value > "23:59") {
+                    e.target.value = "23:59";
+                }
+            });
+            
+            dateInput.addEventListener('change', updateMinTime);
+            updateMinTime(); // Inicializace při načtení
             
             try {
                 const res = await fetch('http://localhost:8080/api/locations');
@@ -96,9 +175,25 @@
 
             document.getElementById('btn-generate').addEventListener('click', async () => {
                 const date = document.getElementById('date-input').value;
+                const timeFrom = document.getElementById('time-from').value;
+                
+                // Přísná validace času na frontendu těsně před odesláním (aby se zabránilo odeslání, pokud stránka byla dlouho otevřená)
+                if (date === todayStr) {
+                    const now = new Date();
+                    const currentHours = now.getHours().toString().padStart(2, '0');
+                    const currentMinutes = now.getMinutes().toString().padStart(2, '0');
+                    const currentTime = `${currentHours}:${currentMinutes}`;
+                    
+                    if (timeFrom < currentTime) {
+                        alert("Zablokováno front-endem: Nelze naplánovat trasu do minulosti! Čas byl automaticky posunut na aktuální.");
+                        document.getElementById('time-from').value = currentTime;
+                        return; // Přeruší odeslání na backend
+                    }
+                }
+
                 const req = {
                     location_id: parseInt(document.getElementById('loc-select').value),
-                    time_from: `${date} ${document.getElementById('time-from').value}:00`,
+                    time_from: `${date} ${timeFrom}:00`,
                     time_to: `${date} ${document.getElementById('time-to').value}:00`,
                     transport_mode: document.getElementById('transport').value,
                     route_type: document.getElementById('route-type').value,
@@ -137,6 +232,60 @@
                         </div>`;
                     }
                 });
+
+                // Vykreslení interaktivní mapy přes Leaflet
+                if (mapInstance) {
+                    mapInstance.remove(); // Smazat starou mapu, pokud existuje
+                }
+                
+                const wps = data.waypoints;
+                if (wps && wps.length > 0) {
+                    // Inicializace mapy na první bod
+                    mapInstance = L.map('map').setView([wps[0].lat, wps[0].lng], 13);
+                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                        attribution: '© OpenStreetMap contributors'
+                    }).addTo(mapInstance);
+
+                    const latlngs = [];
+                    wps.forEach((wp, index) => {
+                        let markerColor = wp.type === 'START' || wp.type === 'END_LOOP' ? 'blue' : 'red';
+                        L.marker([wp.lat, wp.lng]).addTo(mapInstance)
+                         .bindPopup(`<b>${index + 1}. ${wp.name}</b>`);
+                        latlngs.push(L.latLng(wp.lat, wp.lng));
+                    });
+
+                    // Vykreslení REÁLNÉ trasy po silnicích/cestách přes OSRM routing
+                    L.Routing.control({
+                        waypoints: latlngs,
+                        routeWhileDragging: false,
+                        addWaypoints: false,
+                        fitSelectedRoutes: true,
+                        showAlternatives: false,
+                        show: false, // Skryjeme textové navigační instrukce (chceme jen čáru na mapě)
+                        lineOptions: {
+                            styles: [{color: 'indigo', weight: 4}]
+                        },
+                        createMarker: function() { return null; } // Zamezíme duplikování špendlíků
+                    }).addTo(mapInstance);
+                    
+                    // Generování Google Maps navigační URL
+                    // Dokumentace: https://developers.google.com/maps/documentation/urls/get-started#directions-action
+                    let travelModeMaps = 'driving';
+                    if (data.transport_mode === 'WALK') travelModeMaps = 'walking';
+                    if (data.transport_mode === 'BIKE') travelModeMaps = 'bicycling';
+                    
+                    const origin = `${wps[0].lat},${wps[0].lng}`;
+                    const destination = `${wps[wps.length - 1].lat},${wps[wps.length - 1].lng}`;
+                    
+                    let waypointsParam = '';
+                    if (wps.length > 2) {
+                        const midWaypoints = wps.slice(1, -1).map(w => `${w.lat},${w.lng}`).join('|');
+                        waypointsParam = `&waypoints=${midWaypoints}`;
+                    }
+                    
+                    const gmapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}${waypointsParam}&travelmode=${travelModeMaps}`;
+                    document.getElementById('nav-btn').href = gmapsUrl;
+                }
             });
         });
     </script>
