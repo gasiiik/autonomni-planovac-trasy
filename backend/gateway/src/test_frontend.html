@@ -81,7 +81,10 @@
 
     <script>
         document.addEventListener('DOMContentLoaded', async () => {
-            document.getElementById('date-input').valueAsDate = new Date();
+            const todayStr = new Date().toISOString().split('T')[0];
+            const dateInput = document.getElementById('date-input');
+            dateInput.value = todayStr;
+            dateInput.min = todayStr; // Zabrání výběru data v minulosti
             
             try {
                 const res = await fetch('http://localhost:8080/api/locations');
