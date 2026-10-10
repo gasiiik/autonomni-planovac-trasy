@@ -106,7 +106,9 @@ Vývoj frontendu bez Dockeru: `cd frontend && npm install && npm run dev`.
 Hesla k databázi jsou zatím uvedena přímo v `docker-compose.yml` a slouží jen pro lokální vývoj. Skutečné klíče a hesla do repozitáře nepatří, použijte `.env.example`.
 
 ## Tým
-- <Jméno Příjmení> (@[login]) – [role]
+- Oleksandr Kerestii ([@oleksandr106](https://github.com/oleksandr106)) – backend
+- Lukáš Nováček – frontend
+- Jara Bouška – opravy chyb v backendu a frontendu, prezentace
 
 ## Licence
 Kód: [MIT](LICENSE). Ostatní obsah: CC BY 4.0.
