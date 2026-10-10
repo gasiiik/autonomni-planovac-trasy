@@ -27,7 +27,7 @@ DATABASE_URL = os.getenv("DATABASE_URL", "mysql+pymysql://api_user:api_password@
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-USER_AGENT = "KrusnoPlan/1.0 (https://github.com/gasiiik/autonomni-planovac-trasy)"
+USER_AGENT = "NaplanujTo/1.0 (https://github.com/gasiiik/autonomni-planovac-trasy)"
 SERVERS = ["https://overpass-api.de/api/interpreter", "https://overpass.private.coffee/api/interpreter"]
 # Karlovarský kraj rozdělený na 4 obdélníky (celý najednou veřejné servery často nezvládnou)
 TILES = [(49.85, 12.08, 50.16, 12.70), (49.85, 12.70, 50.16, 13.32),

@@ -1,19 +1,84 @@
-import type { Location, PlanRequest, PlanResponse } from '../types/api';
+import type { AccommodationOption, DatasetsResponse, FoodPlace, Location, Place, PlaceDetail, PlanRequest, PlanResponse } from '../types/api';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080/api';
 
-export const fetchLocations = async (): Promise<Location[]> => {
+// Backend (FastAPI přes PHP gateway) vrací chyby jako {"detail": "..."} nebo {"error": "..."}
+async function readError(res: Response, fallback: string): Promise<Error> {
     try {
-        const res = await fetch(`${API_URL}/locations`);
-        if (!res.ok) throw new Error('Failed to fetch locations');
-        return await res.json();
-    } catch (error) {
-        console.error(error);
-        return [
-            { id: 1, name: 'Praha', lat: 50.0755, lng: 14.4378 },
-            { id: 2, name: 'Brno', lat: 49.1951, lng: 16.6068 }
-        ]; // Fallback pro demonstraci
+        const body = await res.json();
+        const detail = body.detail ?? body.error;
+        if (typeof detail === 'string') return new Error(detail);
+        if (Array.isArray(detail)) return new Error('Neplatný požadavek: ' + detail.map((d: { msg: string }) => d.msg).join(', '));
+    } catch {
+        // tělo není JSON
     }
+    return new Error(`${fallback} (HTTP ${res.status})`);
+}
+
+export const fetchLocations = async (): Promise<Location[]> => {
+    const res = await fetch(`${API_URL}/locations`);
+    if (!res.ok) throw await readError(res, 'Nepodařilo se načíst seznam míst');
+    const locations: Location[] = await res.json();
+    return locations.sort((a, b) => a.name.localeCompare(b.name, 'cs'));
+}
+
+export interface AddressResult { name: string; lat: number; lng: number }
+
+// Hledání adresy (OpenStreetMap) -> souřadnice pro výchozí místo; near = poloha uživatele pro řazení výsledků
+export const searchAddress = async (q: string, near?: { lat: number; lng: number } | null, signal?: AbortSignal): Promise<AddressResult[]> => {
+    const loc = near ? `&lat=${near.lat}&lng=${near.lng}` : '';
+    const res = await fetch(`${API_URL}/geocode?q=${encodeURIComponent(q)}${loc}`, { signal });
+    if (!res.ok) throw await readError(res, 'Adresu se nepodařilo vyhledat');
+    return await res.json();
+}
+
+// Trasa po skutečných cestách (OSRM / Valhalla přes náš server - cache a hlídání limitů); [lat, lng][] nebo null
+export const fetchRoute = async (points: { lat: number; lng: number }[], mode: string, wheelchair: boolean, signal?: AbortSignal): Promise<[number, number][] | null> => {
+    const coords = points.map(p => `${p.lng.toFixed(5)},${p.lat.toFixed(5)}`).join(';');
+    const res = await fetch(`${API_URL}/route?coords=${coords}&mode=${mode}&wheelchair=${wheelchair}`, { signal });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.line?.length ? data.line : null;
+}
+
+// Adresa podle souřadnic (null, když ji nejde zjistit)
+export const reverseAddress = async (lat: number, lng: number): Promise<string | null> => {
+    try {
+        const res = await fetch(`${API_URL}/reverse?lat=${lat}&lng=${lng}`);
+        return res.ok ? (await res.json()).name ?? null : null;
+    } catch {
+        return null;
+    }
+}
+
+export const fetchDatasets = async (): Promise<DatasetsResponse> => {
+    const res = await fetch(`${API_URL}/datasets`);
+    if (!res.ok) throw await readError(res, 'Nepodařilo se načíst přehled dat');
+    return await res.json();
+}
+
+export const fetchPlaces = async (): Promise<Place[]> => {
+    const res = await fetch(`${API_URL}/places`);
+    if (!res.ok) throw await readError(res, 'Nepodařilo se načíst místa');
+    return await res.json();
+}
+
+export const fetchPlace = async (id: number): Promise<PlaceDetail> => {
+    const res = await fetch(`${API_URL}/places/${id}`);
+    if (!res.ok) throw await readError(res, 'Nepodařilo se načíst místo');
+    return await res.json();
+}
+
+export const fetchRestaurants = async (): Promise<FoodPlace[]> => {
+    const res = await fetch(`${API_URL}/restaurants`);
+    if (!res.ok) throw await readError(res, 'Nepodařilo se načíst restaurace');
+    return await res.json();
+}
+
+export const fetchAccommodation = async (lat: number, lng: number, limit = 4): Promise<AccommodationOption[]> => {
+    const res = await fetch(`${API_URL}/accommodation?lat=${lat}&lng=${lng}&limit=${limit}`);
+    if (!res.ok) throw await readError(res, 'Nepodařilo se načíst ubytování');
+    return await res.json();
 }
 
 export const generatePlan = async (request: PlanRequest): Promise<PlanResponse> => {
@@ -22,6 +87,6 @@ export const generatePlan = async (request: PlanRequest): Promise<PlanResponse> 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(request)
     });
-    if (!res.ok) throw new Error('Failed to generate plan');
+    if (!res.ok) throw await readError(res, 'Nepodařilo se naplánovat výlet');
     return await res.json();
 }

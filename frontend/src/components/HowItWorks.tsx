@@ -17,7 +17,7 @@ export default function HelpDrawer({ open, onClose }: { open: boolean; onClose: 
     }, [open, onClose]);
 
     return (
-        <div className={`print:hidden fixed inset-0 z-[60] ${open ? '' : 'pointer-events-none'}`} aria-hidden={!open}>
+        <div className={`print:hidden fixed inset-0 z-[60] transition-[visibility] duration-300 ${open ? 'visible' : 'invisible pointer-events-none'}`} aria-hidden={!open}>
             <div onClick={onClose} className={`absolute inset-0 bg-primary-dark/40 transition-opacity duration-300 ${open ? 'opacity-100' : 'opacity-0'}`} />
             <aside role="dialog" aria-modal="true" aria-labelledby="help-title"
                 className={`absolute inset-x-0 bottom-0 max-h-[85vh] bg-white rounded-t-3xl shadow-2xl overflow-y-auto transition-transform duration-300 ${open ? 'translate-y-0' : 'translate-y-full'}`}>
@@ -35,7 +35,7 @@ export default function HelpDrawer({ open, onClose }: { open: boolean; onClose: 
                     <div>
                         <h2 className="text-2xl font-bold text-primary-dark leading-tight mb-3">Celý den naplánovaný za pár vteřin</h2>
                         <p className="text-gray-700 leading-relaxed mb-6">
-                            Nemusíš procházet desítky webů a hlídat, co má kdy otevřeno. KrušnoPlán vezme místa z otevřených dat
+                            Nemusíš procházet desítky webů a hlídat, co má kdy otevřeno. Naplánuj to vezme místa z otevřených dat
                             Karlovarského kraje a poskládá z nich trasu, která se ti vejde do dne.
                         </p>
                         <p className="font-semibold text-primary-dark mb-3">Na co myslíme za tebe</p>

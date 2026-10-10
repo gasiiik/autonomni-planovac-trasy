@@ -8,6 +8,7 @@ import { CategoryTag } from '../components/Icons';
 import PlaceImage from '../components/PlaceImage';
 import FavoriteButton from '../components/FavoriteButton';
 import { useFavorites } from '../utils/favorites';
+import { useUser } from '../services/account';
 import type { FavoritePlace } from '../utils/favorites';
 import { currentTimes, localDate, normalizeTimes, resultUrl } from '../utils/plan';
 import { distanceKm } from '../utils/vacation';
@@ -42,6 +43,7 @@ function toPlanRequest(places: FavoritePlace[], locations: Location[], form: { d
 
 export default function Favorites() {
     const favorites = useFavorites();
+    const user = useUser();
     const navigate = useNavigate();
     const [locations, setLocations] = useState<Location[]>([]);
     const [unselected, setUnselected] = useState<number[]>([]);   // ve výchozím stavu vybrané všechny
@@ -63,7 +65,9 @@ export default function Favorites() {
     return (
         <div className="container mx-auto pt-28 pb-12 px-4 max-w-5xl">
             <h1 className="text-3xl md:text-4xl font-bold text-primary-dark mb-2">Oblíbená místa</h1>
-            <p className="text-gray-600 mb-8">Místa, která sis označil srdíčkem. Jsou uložená jen v tomhle prohlížeči.</p>
+            <p className="text-gray-600 mb-8">Místa, která sis označil srdíčkem.{' '}
+                {user ? 'Jsou uložená v tvém účtu.' : <>Jsou uložená jen v tomhle prohlížeči – s <Link to="/ucet" className="text-primary underline">účtem</Link> je budeš mít všude.</>}
+            </p>
 
             {favorites.length === 0 ? (
                 <div className="bg-white rounded-3xl shadow-lg border border-secondary p-8 text-center">

@@ -65,3 +65,20 @@ export function decodePlan(encoded: string): PlanRequest | null {
 }
 
 export const resultUrl = (req: PlanRequest) => `/result?plan=${encodePlan(req)}`;
+
+// Klíč výletu pro "Moje výlety": stejný výlet i po úpravách (výměna, odebrání zastávky, výběr ubytování)
+const EDIT_FIELDS = ['exclude_ids', 'max_stops', 'only_ids', 'order_ids', 'swap_id', 'keep_ids', 'max_stops_by_day', 'only_ids_by_day', 'swap_by_day'];
+export function tripKey(req: PlanRequest): string {
+    const base: Record<string, unknown> = { ...req };
+    EDIT_FIELDS.forEach(f => delete base[f]);
+    if (req.vacation) base.vacation = { ...req.vacation, stays: undefined };
+    const text = JSON.stringify(base);
+    // 8× FNV-1a s různým začátkem = 64 hex znaků (crypto.subtle funguje jen na https)
+    let out = '';
+    for (let seed = 0; seed < 8; seed++) {
+        let h = (0x811c9dc5 ^ (seed * 0x9e3779b9)) >>> 0;
+        for (let i = 0; i < text.length; i++) h = Math.imul(h ^ text.charCodeAt(i), 0x01000193) >>> 0;
+        out += h.toString(16).padStart(8, '0');
+    }
+    return out;
+}

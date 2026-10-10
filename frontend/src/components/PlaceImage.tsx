@@ -2,6 +2,8 @@ import { useState } from 'react';
 import type { Category } from '../types/api';
 import { CATEGORY_COLORS } from '../constants';
 import { CategoryGlyph } from './Icons';
+import { photoSrc } from '../utils/photo';
+import { illustrationFor } from '../utils/illustrations';
 
 // Odkud fotka je: Wikipedie/Commons (volné licence), jinak náhledový obrázek z webu provozovatele
 function photoCredit(src: string): string {
@@ -13,7 +15,7 @@ function photoCredit(src: string): string {
     }
 }
 
-// Fotka místa; když chybí nebo se nenačte, barevná plocha s ikonou kategorie
+// Fotka místa; když chybí nebo se nenačte, ilustrační fotka podle typu místa, jinak barevná plocha s ikonou kategorie
 export default function PlaceImage({ src, alt, category, className = '', credit = 'bottom', imgClassName = '' }: {
     src?: string | null; alt: string; category?: Category; className?: string;
     credit?: 'bottom' | 'top' | false; imgClassName?: string;
@@ -24,12 +26,24 @@ export default function PlaceImage({ src, alt, category, className = '', credit 
     if (src && !failed) {
         return (
             <div className={`relative overflow-hidden ${className}`}>
-                <img src={src} alt={alt} loading="lazy" onError={() => setFailed(true)} className={`w-full h-full object-cover ${imgClassName}`} />
+                <img src={photoSrc(src)} alt={alt} loading="lazy" onError={() => setFailed(true)} className={`w-full h-full object-cover ${imgClassName}`} />
                 {credit && (
                     <span className={`absolute right-0 z-10 bg-black/45 text-white/90 text-[10px] px-2 py-0.5 ${credit === 'top' ? 'top-0 rounded-bl-md' : 'bottom-0 rounded-tl-md'}`}>
                         {photoCredit(src)}
                     </span>
                 )}
+            </div>
+        );
+    }
+    const illustration = illustrationFor(alt, category);
+    if (illustration) {
+        return (
+            <div className={`relative overflow-hidden ${className}`}>
+                <img src={illustration.src} alt="" loading="lazy" className={`w-full h-full object-cover ${imgClassName}`} />
+                <span className={`absolute right-0 z-10 bg-black/55 text-white text-[10px] px-2 py-0.5 ${credit === 'top' ? 'top-0 rounded-bl-md' : 'bottom-0 rounded-tl-md'}`}
+                    title={`${illustration.author}, ${illustration.license} – ${illustration.source}`}>
+                    Ilustrační foto{credit ? ` · ${illustration.author}, ${illustration.license}` : ''}
+                </span>
             </div>
         );
     }

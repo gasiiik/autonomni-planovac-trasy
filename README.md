@@ -1,6 +1,6 @@
-# KrušnoPlán – plánovač výletů a dovolené po Karlovarském kraji
+# Naplánuj to – plánovač výletů a dovolené po Karlovarském kraji
 
-KrušnoPlán z otevřených dat Karlovarského kraje sestaví výlet nebo celou dovolenou na míru. Uživatel zadá, kolik má času, odkud vyráží, čím se přepravuje a co ho baví, a dostane hotový harmonogram: zastávky v pořadí, časy přesunů, mapu, navigaci, počasí a u dovolené i ubytování. Plánovač přitom hlídá otevírací dobu, sezónu, vstupné, rozpočet, děti i déšť.
+Naplánuj to z otevřených dat Karlovarského kraje sestaví výlet nebo celou dovolenou na míru. Uživatel zadá, kolik má času, odkud vyráží, čím se přepravuje a co ho baví, a dostane hotový harmonogram: zastávky v pořadí, časy přesunů, mapu, navigaci, počasí a u dovolené i ubytování. Plánovač přitom hlídá otevírací dobu, sezónu, vstupné, rozpočet, děti i déšť.
 
 ## Problém → uživatel → data → funkce → přínos
 
@@ -68,7 +68,8 @@ frontend (React, :5173) → PHP gateway (:8080) → Python engine (FastAPI, :800
 - Restaurace, kavárny a hospody pro zastávku na oběd: [OpenStreetMap](https://www.openstreetmap.org/copyright), ODbL – DataZápad z gastronomie obsahuje jen pivovary. Podniky jsou uložené zvlášť (ne mezi turistickými cíli), plánovač čte jejich otevírací dobu podle dne v týdnu a vynechává kavárny čerpacích stanic. Na mapě míst jsou jako vypínatelná vrstva.
 - Ubytování pro plánovač dovolené: [OpenStreetMap](https://www.openstreetmap.org/copyright) přes Overpass API, ODbL – hotely, penziony, apartmány, chaty a kempy (DataZápad obsahuje o ubytování jen souhrnné statistiky).
 - Předpověď počasí: [Open-Meteo](https://open-meteo.com/), CC BY 4.0.
-- Fotky míst: [Wikipedie](https://cs.wikipedia.org/), [Wikimedia Commons](https://commons.wikimedia.org/) a [Wikidata](https://www.wikidata.org/) – odkazujeme na náhledy, licence podle jednotlivých souborů (většinou CC BY-SA). Fotka se přiřadí jen při shodě názvu a polohy. Když tam fotka není, použije se náhledový obrázek z oficiálního webu místa uvedeného v DataZápadu – patří provozovateli webu a u fotky je uveden zdroj.
+- Trasa na mapě po silnicích, cyklostezkách a cestách: [OSRM](https://project-osrm.org/) nad OpenStreetMap ([routing.openstreetmap.de](https://routing.openstreetmap.de/about.html), FOSSGIS). Když služba neodpoví, zobrazí se trasa vzdušnou čarou.
+- Fotky míst: [Wikipedie](https://cs.wikipedia.org/), [Wikimedia Commons](https://commons.wikimedia.org/) a [Wikidata](https://www.wikidata.org/) – odkazujeme na náhledy, licence podle jednotlivých souborů (většinou CC BY-SA). Fotka se přiřadí jen při shodě názvu a polohy. Když tam fotka není, použije se náhledový obrázek z oficiálního webu místa uvedeného v DataZápadu – patří provozovateli webu a u fotky je uveden zdroj. Fotky prohlížeč stahuje přes náš server (`/photos`), který si je jednou uloží – Wikimedia při mnoha obrázcích najednou odpovídá 429 a fotky by se náhodně nenačítaly.
 - Kalendář akcí: odkazy do oficiálního kalendáře kraje [Kam na západě](https://kamnazapade.cz/) – data nepřebíráme, jen na kalendář odkazujeme.
 - Mapové podklady: © přispěvatelé [OpenStreetMap](https://www.openstreetmap.org/copyright), ODbL.
 
@@ -81,12 +82,15 @@ frontend (React, :5173) → PHP gateway (:8080) → Python engine (FastAPI, :800
 
 Potřebujete [Docker](https://www.docker.com/) s Docker Compose.
 
-V hlavní složce projektu (nebo ve složce `backend`, výsledek je stejný):
+V hlavní složce projektu (potřeba je jen Docker Desktop):
 ```bash
 docker compose up -d --build
 ```
+Web: http://localhost:5173, API: http://localhost:8080/api. Při prvním spuštění se databáze zakládá asi půl minuty – brána a engine na ni počkají (`docker compose ps` ukáže `db ... (healthy)`).
 
-Data z DataZápadu i ubytování a restaurace z OpenStreetMap se stáhnou **automaticky** při startu enginu – při prvním spuštění (cca 10 minut včetně fotek) a pak vždy, když jsou starší než 7 dní (`AUTO_IMPORT_MAX_AGE_DAYS` v `backend/docker-compose.yml`, vypnutí `AUTO_IMPORT=0`). Aplikace mezitím běží, průběh uvidíte v `docker compose logs -f python_engine`.
+Když něco nejde: `docker compose ps` (běží všechny 4 kontejnery?) a `docker compose logs db` / `docker compose logs php_gateway`. Starou databázi z dřívější verze smaže `docker compose down -v` (data se pak stáhnou znovu).
+
+Data z DataZápadu i ubytování a restaurace z OpenStreetMap se stáhnou **automaticky** při startu enginu – při prvním spuštění (cca 10 minut včetně fotek) a pak vždy, když jsou starší než 7 dní (`AUTO_IMPORT_MAX_AGE_DAYS` v `docker-compose.yml`, vypnutí `AUTO_IMPORT=0`). Aplikace mezitím běží, průběh uvidíte v `docker compose logs -f python_engine`.
 
 Ruční spuštění importu:
 ```bash

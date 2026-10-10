@@ -1,4 +1,5 @@
-version: '3.8'
+# Spuštění celého projektu: docker compose up -d --build
+name: backend
 
 services:
   db:
@@ -8,11 +9,20 @@ services:
       MARIADB_DATABASE: krusnoplan
       MARIADB_USER: api_user
       MARIADB_PASSWORD: api_password
-    ports:
-      - "3307:3306" # Změněno na 3307 pro zamezení konfliktů
+    # Port 3306 nezveřejňujeme - brána i engine se připojují uvnitř Dockeru
+    # (a u koho běží lokální MySQL/XAMPP, tomu by obsazený port databázi nespustil)
     volumes:
       - mariadb_data:/var/lib/mysql
-      - ./backend/db/init.sql:/docker-entrypoint-initdb.d/init.sql
+      # Při prvním startu: init.sql (struktura) a seed_data.sql (všechna data - aplikace je hned kompletní)
+      - ./backend/db/init.sql:/docker-entrypoint-initdb.d/01-init.sql
+      - ./backend/db/seed_data.sql:/docker-entrypoint-initdb.d/02-seed_data.sql
+    # Databáze je "zdravá", až když přijímá spojení (první start s init.sql trvá desítky sekund)
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
 
   php_gateway:
     build:
@@ -22,7 +32,8 @@ services:
     volumes:
       - ./backend/gateway/src:/var/www/html
     depends_on:
-      - db
+      db:
+        condition: service_healthy
 
   python_engine:
     build:
@@ -31,18 +42,24 @@ services:
       - "8000:8000"
     volumes:
       - ./backend/engine:/app
+      - photo_cache:/data/photos     # fotky míst stažené na server (viz app/photos.py)
     environment:
       - DATABASE_URL=mysql+pymysql://api_user:api_password@db/krusnoplan
+      - AUTO_IMPORT=1
+      - AUTO_IMPORT_MAX_AGE_DAYS=7
+      - PYTHONUNBUFFERED=1
     depends_on:
-      - db
+      db:
+        condition: service_healthy
 
   frontend:
     build:
       context: ./frontend
     ports:
-      - "3000:80"
+      - "5173:80"
     depends_on:
       - php_gateway
 
 volumes:
   mariadb_data:
+  photo_cache:

@@ -54,7 +54,7 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 ARCGIS_BASE = "https://services-eu1.arcgis.com/rWPztfBz4QnSDpfD/arcgis/rest/services/"
 # Wikimedia vyžaduje v User-Agent kontakt (URL/e-mail), jinak vrací HTTP 429 na každý dotaz
-USER_AGENT = "KrusnoPlan/1.0 (https://github.com/gasiiik/autonomni-planovac-trasy; SOC projekt - planovac tras)"
+USER_AGENT = "NaplanujTo/1.0 (https://github.com/gasiiik/autonomni-planovac-trasy; SOC projekt - planovac tras)"
 
 # Konfigurace vrstev DataZápad -> naše kategorie a odhady pro plánovač
 #   duration = průměrná délka návštěvy (min), price = odhad vstupného (Kč), pokud je placené
@@ -662,6 +662,37 @@ _BAD_PAGE_IMG = re.compile(r"banner|header|\bbg\b|bg[-_.]|background|sprite|flag
                            r"pozvank|plakat|poster|letak|flyer|[-_]a[45][-_.]|program|titulka|regioncard|card.|reklam|mapa|plan[-_]", re.I)
 # Ručně ověřené špatné shody (fotka sousedního objektu) - název souboru po dekódování URL
 _BLOCKED_IMAGES = ("Bečov náměstí úřad",)
+# Fotka jiného objektu u konkrétního místa: (část názvu místa, část názvu souboru)
+_BLOCKED_PAIRS = (
+    ("Kostel svatého Jáchyma", "mincovna"),
+    ("Festivalový most", "Lavička_Václava_Havla"),
+    ("Muzeum numismatiky", "kostel_sv._Kláry"),
+    ("Čertkus", "Podhorní_nádrž"),
+    ("Důl Mauritius", "štola_Kryštof"),
+    ("Mini zoo Diana", "restaurace Diana"),
+    ("Centrum Trampolín", "Aussichtsturm"),
+)
+
+
+# Ručně dohledané a zkontrolované fotky (Commons / oficiální weby), mají přednost před automatickým hledáním
+MANUAL_IMAGES = {
+    "ZĂˇmek Ostrov": "https://thumb.wikimedia.org/wikipedia/commons/thumb/3/3c/Ostrov%2C_z%C3%A1mek_%281%29.jpg/960px-Ostrov%2C_z%C3%A1mek_%281%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+    "ZĹ™Ă­cenina zĂˇmku Hammerhof (HamrnĂ­ky)": "https://thumb.wikimedia.org/wikipedia/commons/thumb/e/ed/Hammerhof_%282416%29.jpg/960px-Hammerhof_%282416%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+    "Muzeum Abertamy": "https://thumb.wikimedia.org/wikipedia/commons/thumb/3/37/Abertamy%2C_muzeum%2C_mineralogie_%283%29.jpg/960px-Abertamy%2C_muzeum%2C_mineralogie_%283%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+    "DĹŻl Mauritius": "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/57/H%C5%99ebe%C4%8Dn%C3%A1_d%C5%AFl_Mauritius_vstup_do_podzem%C3%AD.jpg/960px-H%C5%99ebe%C4%8Dn%C3%A1_d%C5%AFl_Mauritius_vstup_do_podzem%C3%AD.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+    "Kostel svatĂ©ho JĂˇchyma v JĂˇchymovÄ›": "https://thumb.wikimedia.org/wikipedia/commons/thumb/d/d8/J%C3%A1chymov_%28KV%29%2C_kostel_sv._J%C3%A1chyma.jpg/960px-J%C3%A1chymov_%28KV%29%2C_kostel_sv._J%C3%A1chyma.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+    "Muzeum numismatiky v Chebu": "https://www.mncheb.cz/wp-content/uploads/2024/07/muzeum-1-1-1024x461.jpg",
+    "Festivalový most v Karlových Varech": "https://cdn.kudyznudy.cz/files/0c/0c593ae9-6447-4d03-a2f3-7de4da89860a.jpg?v=20250326062629",
+    "Přírodní památka Čertkus": "https://cdn.kudyznudy.cz/files/89/8951376f-1904-4afb-9ff6-75e9ec292e09.jpg?v=20250304022515",
+    "Lyžařský klub Kraslice - Ski a Trail park Saporo": "https://www.lkkraslice.cz/img/picture/154/titulni_1_1920x937.jpg",
+}
+
+
+def blocked_image(name, url):
+    if not url:
+        return False
+    decoded = urllib.parse.unquote(url)
+    return any(b in decoded for b in _BLOCKED_IMAGES) or         any(p in (name or "") and f.lower() in decoded.lower() for p, f in _BLOCKED_PAIRS)
 MIN_PAGE_PHOTO_BYTES = 40000
 
 
@@ -694,9 +725,7 @@ def page_image(poi):
 def find_image(poi):
     """Nejdřív volné licence (Wikipedie, Commons, Wikidata), pak oficiální web místa z DataZápadu."""
     img = wiki_image(poi) or wikidata_image(poi) or website_image(poi) or page_image(poi)
-    if img and any(b in urllib.parse.unquote(img) for b in _BLOCKED_IMAGES):
-        return None
-    return img
+    return None if blocked_image(poi.get("name"), img) else img
 
 
 def best_match(data, name_tokens, get_thumb):
@@ -841,6 +870,10 @@ def run_import(with_images=True, dry_run=False, refresh_images=False):
             # Fotku přepíšeme jen novým nálezem (výpadek Wikipedie nesmaže dříve nalezené fotky)
             if with_images and (poi.get("image_url") or not row):
                 fields["image_url"] = poi.get("image_url")
+            if row and blocked_image(row.name, row.image_url):
+                fields["image_url"] = None   # dříve přiřazená špatná fotka
+            if MANUAL_IMAGES.get(poi.get("name")):
+                fields["image_url"] = MANUAL_IMAGES[poi["name"]]
 
             if row:
                 for k, v in fields.items():

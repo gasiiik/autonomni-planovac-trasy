@@ -7,5 +7,7 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
     host: true,
+    // npm run dev: fotky míst přes engine (v Dockeru to dělá nginx, viz nginx.conf)
+    proxy: { '/photos': 'http://localhost:8000' },
   }
 })
