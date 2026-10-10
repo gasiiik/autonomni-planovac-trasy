@@ -1,5 +1,6 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Depends, HTTPException
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import List, Literal, Optional
@@ -10,14 +11,15 @@ from zoneinfo import ZoneInfo
 import urllib.request
 import json
 
-from .database import get_db
+from .database import get_db, SessionLocal
 from .models import Location, ActivityPOI, Dataset, Accommodation, Restaurant
 from .opening_hours import hours_for_day
-from . import auto_import
+from . import auto_import, photos
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     auto_import.start() # při startu doplní / obnoví data z DataZápad (na pozadí)
+    photos.prefetch_all(SessionLocal)  # fotky míst do cache na serveru (na pozadí)
     yield
 
 app = FastAPI(title="KrušnoPlán Python Engine - Pokročilé Trasování", lifespan=lifespan)
@@ -174,6 +176,20 @@ def weather_status_for(forecast, t_from: datetime, t_to: datetime) -> str:
     # WMO Kódy: 50+ znamená déšť, sníh, bouřky. Špatné počasí = prší většinu plánovaného času.
     bad_hours = sum(1 for c in window if c >= 50)
     return "BAD_WEATHER" if bad_hours * 2 >= len(window) else "GOOD_WEATHER"
+
+# Fotka místa přes náš server (viz photos.py) - frontend: /photos?u=<původní adresa fotky>
+@app.get("/photos")
+def get_photo(u: str, db: Session = Depends(get_db)):
+    hit = photos.cached(u)
+    if not hit:
+        if not photos.known_photo(db, u):
+            raise HTTPException(status_code=404, detail="Neznámá fotka.")
+        hit = photos.download(u)
+        if not hit:
+            raise HTTPException(status_code=404, detail="Fotku se nepodařilo stáhnout.")
+    path, ctype = hit
+    return FileResponse(path, media_type=ctype, headers={"Cache-Control": "public, max-age=2592000"})
+
 
 @app.get("/internal/locations")
 def get_locations(db: Session = Depends(get_db)):

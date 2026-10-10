@@ -613,7 +613,7 @@ function ResultView() {
                 {/* Mapa */}
                 <div className="lg:w-1/2 print:hidden">
                     <div className="sticky top-28 rounded-3xl h-[450px] lg:h-[calc(100vh-8rem)] overflow-hidden shadow-lg border border-secondary z-0">
-                        <RouteMap key={activeDay} waypoints={result.waypoints} activeStop={activeStop} onSelectStop={selectStop} />
+                        <RouteMap key={activeDay} waypoints={result.waypoints} transport={request.transport_mode} activeStop={activeStop} onSelectStop={selectStop} />
                         {stops.length > 0 && (
                             <div className="absolute top-3 right-3 z-[1000] flex gap-2">
                                 <a href={googleRouteUrl(result.waypoints, request.transport_mode)} target="_blank" rel="noopener noreferrer" className={MAP_BTN}>
@@ -629,7 +629,7 @@ function ResultView() {
                         )}
                     </div>
                     {stops.length > 0 && (
-                        <p className="text-xs text-gray-500 mt-2">Trasa je zobrazena vzdušnou čarou. Najetím na zastávku ji zvýrazníte na mapě.</p>
+                        <p className="text-xs text-gray-500 mt-2">Trasa vede po silnicích a cestách z OpenStreetMap. Najetím na zastávku ji zvýrazníte na mapě, kliknutím na značku přeskočíte v seznamu.</p>
                     )}
                 </div>
             </div>

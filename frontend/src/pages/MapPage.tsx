@@ -4,6 +4,7 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import type { Category, FoodPlace, Place } from '../types/api';
 import { fetchPlaces, fetchRestaurants } from '../services/apiClient';
+import { photoSrc } from '../utils/photo';
 import { CATEGORY_COLORS, CATEGORY_LABELS } from '../constants';
 
 const CATEGORIES: Category[] = ['SIGHTSEEING', 'PARK', 'FUN', 'GASTRO'];
@@ -69,7 +70,7 @@ export default function MapPage() {
         if (!layer) return;
         layer.clearLayers();
         filtered.forEach(p => {
-            const img = p.image_url ? `<img src="${escapeHtml(p.image_url)}" alt="" style="width:220px;height:120px;object-fit:cover;border-radius:8px;margin-bottom:6px">` : '';
+            const img = p.image_url ? `<img src="${escapeHtml(photoSrc(p.image_url)!)}" alt="" style="width:220px;height:120px;object-fit:cover;border-radius:8px;margin-bottom:6px">` : '';
             L.circleMarker([p.lat, p.lng], {
                 radius: 7, color: '#fff', weight: 2, fillColor: CATEGORY_COLORS[p.category], fillOpacity: 0.9,
             }).bindPopup(`${img}<div style="font-size:12px;color:#666"><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${CATEGORY_COLORS[p.category]};margin-right:5px"></span>${CATEGORY_LABELS[p.category]} · ${p.price ? `${Math.round(p.price)} Kč` : 'zdarma'}</div>

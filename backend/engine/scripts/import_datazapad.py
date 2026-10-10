@@ -662,6 +662,23 @@ _BAD_PAGE_IMG = re.compile(r"banner|header|\bbg\b|bg[-_.]|background|sprite|flag
                            r"pozvank|plakat|poster|letak|flyer|[-_]a[45][-_.]|program|titulka|regioncard|card.|reklam|mapa|plan[-_]", re.I)
 # Ručně ověřené špatné shody (fotka sousedního objektu) - název souboru po dekódování URL
 _BLOCKED_IMAGES = ("Bečov náměstí úřad",)
+# Fotka jiného objektu u konkrétního místa: (část názvu místa, část názvu souboru)
+_BLOCKED_PAIRS = (
+    ("Kostel svatého Jáchyma", "mincovna"),
+    ("Festivalový most", "Lavička_Václava_Havla"),
+    ("Muzeum numismatiky", "kostel_sv._Kláry"),
+    ("Čertkus", "Podhorní_nádrž"),
+    ("Důl Mauritius", "štola_Kryštof"),
+    ("Mini zoo Diana", "restaurace Diana"),
+    ("Centrum Trampolín", "Aussichtsturm"),
+)
+
+
+def blocked_image(name, url):
+    if not url:
+        return False
+    decoded = urllib.parse.unquote(url)
+    return any(b in decoded for b in _BLOCKED_IMAGES) or         any(p in (name or "") and f.lower() in decoded.lower() for p, f in _BLOCKED_PAIRS)
 MIN_PAGE_PHOTO_BYTES = 40000
 
 
@@ -694,9 +711,7 @@ def page_image(poi):
 def find_image(poi):
     """Nejdřív volné licence (Wikipedie, Commons, Wikidata), pak oficiální web místa z DataZápadu."""
     img = wiki_image(poi) or wikidata_image(poi) or website_image(poi) or page_image(poi)
-    if img and any(b in urllib.parse.unquote(img) for b in _BLOCKED_IMAGES):
-        return None
-    return img
+    return None if blocked_image(poi.get("name"), img) else img
 
 
 def best_match(data, name_tokens, get_thumb):
@@ -841,6 +856,8 @@ def run_import(with_images=True, dry_run=False, refresh_images=False):
             # Fotku přepíšeme jen novým nálezem (výpadek Wikipedie nesmaže dříve nalezené fotky)
             if with_images and (poi.get("image_url") or not row):
                 fields["image_url"] = poi.get("image_url")
+            if row and blocked_image(row.name, row.image_url):
+                fields["image_url"] = None   # dříve přiřazená špatná fotka
 
             if row:
                 for k, v in fields.items():

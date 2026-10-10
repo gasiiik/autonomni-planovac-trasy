@@ -13,7 +13,9 @@ services:
     # (a u koho běží lokální MySQL/XAMPP, tomu by obsazený port databázi nespustil)
     volumes:
       - mariadb_data:/var/lib/mysql
-      - ./backend/db/init.sql:/docker-entrypoint-initdb.d/init.sql
+      # Při prvním startu: init.sql (struktura) a seed_data.sql (všechna data - aplikace je hned kompletní)
+      - ./backend/db/init.sql:/docker-entrypoint-initdb.d/01-init.sql
+      - ./backend/db/seed_data.sql:/docker-entrypoint-initdb.d/02-seed_data.sql
     # Databáze je "zdravá", až když přijímá spojení (první start s init.sql trvá desítky sekund)
     healthcheck:
       test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
@@ -40,6 +42,7 @@ services:
       - "8000:8000"
     volumes:
       - ./backend/engine:/app
+      - photo_cache:/data/photos     # fotky míst stažené na server (viz app/photos.py)
     environment:
       - DATABASE_URL=mysql+pymysql://api_user:api_password@db/krusnoplan
       - AUTO_IMPORT=1
@@ -59,3 +62,4 @@ services:
 
 volumes:
   mariadb_data:
+  photo_cache:

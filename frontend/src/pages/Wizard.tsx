@@ -162,8 +162,10 @@ export default function Wizard() {
     const validateStep = (): string => {
         if (step === 1) {
             if (formData.time_to <= formData.time_from) return 'Čas návratu musí být později než čas odjezdu.';
+            // Předvyplněný "teď" je na celé minuty a během vyplňování o chvíli zastará -> do 15 minut ho jen
+            // posuneme na aktuální čas (nextStep), chyba až u opravdu proběhlého času
             const start = new Date(`${formData.date}T${formData.time_from}`);
-            if (start < new Date()) return 'Tento čas už proběhl – vyber pozdější čas nebo jiný den.';
+            if (start.getTime() < Date.now() - 15 * 60000) return 'Tento čas už proběhl – vyber pozdější čas nebo jiný den.';
         }
         if (step === 2 && !formData.location_id && !formData.start) return 'Vyber výchozí obec, nebo použij svou polohu.';
         return '';
@@ -172,6 +174,7 @@ export default function Wizard() {
     const nextStep = () => {
         const err = validateStep();
         if (err) return setStepError(err);
+        if (step === 1) fixTimes();
         setStep(s => Math.min(s + 1, STEPS));
     };
     const prevStep = () => { setStepError(''); setStep(s => Math.max(s - 1, 1)); };

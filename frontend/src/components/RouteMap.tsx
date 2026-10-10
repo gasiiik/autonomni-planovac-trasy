@@ -23,13 +23,27 @@ const FLAG_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" st
 
 const escapeHtml = (s: string) => s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 
+// Trasa po skutečných cestách: OSRM nad OpenStreetMap (FOSSGIS) - auto, kolo i pěšky
+const ROUTING_PROFILE: Record<string, string> = { CAR: 'routed-car', BIKE: 'routed-bike', WALK: 'routed-foot' };
+
+async function fetchRoadRoute(points: L.LatLng[], transport: string, signal: AbortSignal): Promise<L.LatLng[] | null> {
+    const profile = ROUTING_PROFILE[transport] ?? 'routed-car';
+    const coords = points.map(p => `${p.lng.toFixed(5)},${p.lat.toFixed(5)}`).join(';');
+    const res = await fetch(`https://routing.openstreetmap.de/${profile}/route/v1/driving/${coords}?overview=full&geometries=geojson`, { signal });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const line: [number, number][] | undefined = data.routes?.[0]?.geometry?.coordinates;
+    return data.code === 'Ok' && line?.length ? line.map(([lng, lat]) => L.latLng(lat, lng)) : null;
+}
+
 interface Props {
     waypoints: Waypoint[];
+    transport?: string;                       // CAR / BIKE / WALK - podle toho trasa po silnicích, cyklostezkách nebo cestách
     activeStop?: number | null;               // číslo zastávky zvýrazněné v seznamu
     onSelectStop?: (stop: number) => void;    // klik na značku -> posun seznamu na zastávku
 }
 
-export default function RouteMap({ waypoints, activeStop = null, onSelectStop }: Props) {
+export default function RouteMap({ waypoints, transport = 'CAR', activeStop = null, onSelectStop }: Props) {
     const containerRef = useRef<HTMLDivElement>(null);
     const mapRef = useRef<L.Map | null>(null);
     const markersRef = useRef<Map<number, L.Marker>>(new Map());
@@ -46,8 +60,18 @@ export default function RouteMap({ waypoints, activeStop = null, onSelectStop }:
         }).addTo(map);
 
         const points = waypoints.map(w => L.latLng(w.lat, w.lng));
-        // Trasa (vzdušnou čarou - stejně jako počítá backend)
-        L.polyline(points, { color: '#087F78', weight: 4, opacity: 0.8, dashArray: '8 8' }).addTo(map);
+        // Nejdřív vzdušnou čarou (hned), po načtení ji nahradí trasa po skutečných cestách
+        const straight = L.polyline(points, { color: '#087F78', weight: 3, opacity: 0.6, dashArray: '6 8' }).addTo(map);
+        const controller = new AbortController();
+        fetchRoadRoute(points, transport, controller.signal)
+            .then(road => {
+                if (!road) return;
+                straight.remove();
+                L.polyline(road, { color: '#155E50', weight: 7, opacity: 0.35 }).addTo(map);   // lem
+                L.polyline(road, { color: '#087F78', weight: 4, opacity: 0.95 }).addTo(map);
+                map.attributionControl.addAttribution('Trasa: <a href="https://routing.openstreetmap.de/about.html">OSRM / FOSSGIS</a>');
+            })
+            .catch(() => undefined);   // služba nedostupná - zůstane vzdušná čára
 
         const markers = new Map<number, L.Marker>();
         let stop = 0;
@@ -67,8 +91,8 @@ export default function RouteMap({ waypoints, activeStop = null, onSelectStop }:
         mapRef.current = map;
 
         map.fitBounds(L.latLngBounds(points), { padding: [40, 40], maxZoom: 15 });
-        return () => { map.remove(); mapRef.current = null; markersRef.current = new Map(); };
-    }, [waypoints]);
+        return () => { controller.abort(); map.remove(); mapRef.current = null; markersRef.current = new Map(); };
+    }, [waypoints, transport]);
 
     // Zvýraznění zastávky, na kterou uživatel ukazuje v seznamu
     useEffect(() => {
@@ -76,8 +100,10 @@ export default function RouteMap({ waypoints, activeStop = null, onSelectStop }:
             marker.setIcon(markerIcon(String(n), false, n === activeStop));
             marker.setZIndexOffset(n === activeStop ? 1000 : 0);
         });
+        // Mapu posuneme jen když zastávka není vidět (jinak by při projíždění seznamu pořád skákala)
         const active = activeStop ? markersRef.current.get(activeStop) : undefined;
-        if (active && mapRef.current) mapRef.current.panTo(active.getLatLng(), { animate: true });
+        const map = mapRef.current;
+        if (active && map && !map.getBounds().pad(-0.1).contains(active.getLatLng())) map.panTo(active.getLatLng(), { animate: true });
     }, [activeStop, waypoints]);
 
     return <div ref={containerRef} className="w-full h-full" />;

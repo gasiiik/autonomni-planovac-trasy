@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { Category } from '../types/api';
 import { CATEGORY_COLORS } from '../constants';
 import { CategoryGlyph } from './Icons';
+import { photoSrc } from '../utils/photo';
 
 // Odkud fotka je: Wikipedie/Commons (volné licence), jinak náhledový obrázek z webu provozovatele
 function photoCredit(src: string): string {
@@ -24,7 +25,7 @@ export default function PlaceImage({ src, alt, category, className = '', credit 
     if (src && !failed) {
         return (
             <div className={`relative overflow-hidden ${className}`}>
-                <img src={src} alt={alt} loading="lazy" onError={() => setFailed(true)} className={`w-full h-full object-cover ${imgClassName}`} />
+                <img src={photoSrc(src)} alt={alt} loading="lazy" onError={() => setFailed(true)} className={`w-full h-full object-cover ${imgClassName}`} />
                 {credit && (
                     <span className={`absolute right-0 z-10 bg-black/45 text-white/90 text-[10px] px-2 py-0.5 ${credit === 'top' ? 'top-0 rounded-bl-md' : 'bottom-0 rounded-tl-md'}`}>
                         {photoCredit(src)}
