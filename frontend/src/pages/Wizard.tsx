@@ -207,7 +207,7 @@ export default function Wizard() {
         }
         if (step === 2 && isVacation) {
             if (vacationTowns.length === 0) return 'Vyber aspoň jednu obec, kterou chceš navštívit.';
-            if (vacationTowns.length > vacationDays) return `Na ${vacationDays} dní vyber nejvýš ${vacationDays} obcí, nebo prodluž dovolenou.`;
+            if (vacationTowns.length > vacationDays * 3) return `Na ${vacationDays} dní je to moc obcí – vyber nejvýš ${vacationDays * 3} (3 za den), nebo prodluž dovolenou.`;
             return '';
         }
         if (step === 1) {
@@ -318,16 +318,22 @@ export default function Wizard() {
                                             onSelect={id => { setStepError(''); setFormData(prev => ({ ...prev, vacation_towns: [...(prev.vacation_towns ?? []), id] })); }}
                                             onClearStart={() => undefined}
                                         />
-                                        {vacationTowns.length > 0 && vacationDays > 0 && vacationTowns.length <= vacationDays && (
-                                            <p className="text-sm text-gray-600 mt-3 flex flex-wrap items-center gap-x-2">
-                                                <MapPin size={15} className="text-primary" aria-hidden="true" /> Rozvrh:
-                                                {(() => {
-                                                    const per = allocateDays(vacationDays, vacationTowns.map(Number));
-                                                    return vacationTowns.map(id => `${townName(id)} ${per.filter(t => String(t) === id).length} ${per.filter(t => String(t) === id).length === 1 ? 'den' : per.filter(t => String(t) === id).length < 5 ? 'dny' : 'dní'}`).join(' → ');
-                                                })()}
-                                            </p>
+                                        {vacationTowns.length > 0 && vacationDays > 0 && vacationTowns.length <= vacationDays * 3 && (
+                                            <div className="mt-3 rounded-xl bg-secondary/60 p-3">
+                                                <p className="text-sm font-semibold text-primary-dark flex items-center gap-1.5 mb-1">
+                                                    <MapPin size={15} className="text-primary" aria-hidden="true" /> Rozvrh dovolené
+                                                </p>
+                                                <ol className="text-sm text-gray-700 space-y-0.5">
+                                                    {allocateDays(vacationDays, vacationTowns.map(Number)).map((group, d) => (
+                                                        <li key={d}><span className="text-gray-500">Den {d + 1}:</span> {group.map(id => townName(String(id))).join(' + ')}</li>
+                                                    ))}
+                                                </ol>
+                                            </div>
                                         )}
-                                        <p className="text-sm text-gray-500 mt-2">Obce navštívíme v pořadí, v jakém je vybereš. U každé ti nabídneme ubytování a každý den naplánujeme výlet z něj.</p>
+                                        <p className="text-sm text-gray-500 mt-2">
+                                            Obce navštívíme v pořadí výběru. Když vybereš víc obcí než dní, spojíme je do jednoho výletu přes víc měst.
+                                            Když míň, budeme v obci víc dní a dojde-li tam program, přidáme okolní obce. U každé obce, kde bydlíš, nabídneme ubytování.
+                                        </p>
                                     </div>
                                 ) : locationsError ? (
                                     <p className="bg-red-100 text-red-700 p-3 rounded-xl">{locationsError}</p>

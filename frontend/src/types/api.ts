@@ -20,6 +20,8 @@ export interface PlanRequest {
     has_children?: boolean;
     indoor_when_rain?: boolean;
     exclude_ids?: number[];          // místa navštívená v předchozích dnech dovolené
+    area_location_ids?: number[];    // dovolená: hledat i v okolí dalších obcí (automaticky přidané okolí)
+    day_town_ids?: number[];         // dovolená: obce, kterými výlet ten den vede (čas dne se rozdělí)
     vacation?: VacationRequest | null; // jen frontend: plán dovolené (backend neznámá pole ignoruje)
 }
 

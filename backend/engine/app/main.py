@@ -54,6 +54,8 @@ class PlanRequest(BaseModel):
     participants_count: Optional[int] = 1
     has_children: Optional[bool] = False
     exclude_ids: Optional[List[int]] = []  # místa navštívená v předchozích dnech dovolené
+    area_location_ids: Optional[List[int]] = []  # dovolená: hledat i v okolí dalších obcí (automaticky přidané okolí)
+    day_town_ids: Optional[List[int]] = []       # dovolená: další obce, kterými výlet ten den vede (čas dne se rozdělí)
     indoor_when_rain: Optional[bool] = False # při dešti jen místa uvnitř (volba uživatele)
 
 def haversine_distance(lat1, lon1, lat2, lon2):
@@ -70,6 +72,9 @@ def calc_travel_time(dist_km: float, mode: str) -> int:
     speeds = {"WALK": 5.0, "BIKE": 15.0, "CAR": 40.0}
     spd = speeds.get(mode.upper(), 5.0)
     return math.ceil((dist_km / spd) * 60)
+
+# Okruh "obce" při výletu přes víc měst - čas dne se dělí mezi místa v těchto okruzích
+TOWN_RADIUS_KM = 3.0
 
 # Dosah hledání míst od výchozího bodu podle způsobu dopravy (km)
 SEARCH_RADIUS_KM = {"WALK": 3.0, "BIKE": 15.0, "CAR": 40.0}
@@ -229,8 +234,14 @@ def generate_plan(req: PlanRequest, db: Session = Depends(get_db)):
     candidates = db.query(ActivityPOI).filter(ActivityPOI.category.in_(req.interests)).all()
     # Jen podle skutečné vzdálenosti - obec může mít katastr přes 6 km (pěšky by to byl nesmysl)
     excluded = set(req.exclude_ids or [])
+    # Okolí startu + okolí dalších obcí dne (dovolená: výlet přes víc měst)
+    def town_centers(ids):
+        found = {l.id: (l.lat, l.lng) for l in db.query(Location).filter(Location.id.in_(ids)).all()} if ids else {}
+        return [found[i] for i in ids if i in found]  # v pořadí, jak je uživatel vybral
+    day_towns = [(loc.lat, loc.lng)] + town_centers(req.day_town_ids or [])
+    centers = day_towns + town_centers(req.area_location_ids or [])
     pois = [p for p in candidates
-            if p.id not in excluded and haversine_distance(loc.lat, loc.lng, p.lat, p.lng) <= radius_km]
+            if p.id not in excluded and any(haversine_distance(c[0], c[1], p.lat, p.lng) <= radius_km for c in centers)]
     # Sezónní místa (lanová centra, koupaliště, rozhledny) mimo sezónu vyřadíme
     out_of_season = [p for p in pois if not in_season(p, t_from)]
     pois = [p for p in pois if in_season(p, t_from)]
@@ -346,6 +357,15 @@ def generate_plan(req: PlanRequest, db: Session = Depends(get_db)):
 
             # Řadíme podle toho, za jak dlouho můžeme s návštěvou začít (cesta + případné čekání)
             feasible.append((travel_approx + wait, dist, p, wait))
+
+        # Výlet přes víc měst: čas dne rozdělíme mezi obce (dopoledne první, odpoledne druhá...)
+        if len(day_towns) > 1 and feasible:
+            part = int((current_time - t_from).total_seconds() / 60 / max(total_mins, 1) * len(day_towns))
+            cx = day_towns[min(part, len(day_towns) - 1)]
+            # "V obci" = do 3 km od jejího středu (dosah auta 40 km by zahrnul i sousední města)
+            in_town = [fp for fp in feasible if haversine_distance(cx[0], cx[1], fp[2].lat, fp[2].lng) <= min(radius_km, TOWN_RADIUS_KM)]
+            if in_town:
+                feasible = in_town
 
         # 5. Chytrý výběr místo čistého "nejbližšího":
         #    a) mezi 11:30 a 14:00 upřednostníme oběd (pokud uživatel chce Gastro)

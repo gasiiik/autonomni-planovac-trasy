@@ -266,7 +266,15 @@ export default function Result() {
                         </div>
                     )}
                     <p className="text-gray-500">{new Date(date).toLocaleDateString('cs-CZ', { weekday: 'long', day: 'numeric', month: 'long' })} · {TRANSPORT_LABELS[request.transport_mode].toLowerCase()}</p>
-                    <h1 className="text-3xl font-bold text-primary-dark mb-4">{trip ? `Den ${activeDay + 1}: ${result.location}` : `Tvůj výlet: ${result.location}`}</h1>
+                    <h1 className="text-3xl font-bold text-primary-dark mb-2">
+                        {tripDay ? `Den ${activeDay + 1}: ${tripDay.towns.map(t => t.name).join(' + ')}` : `Tvůj výlet: ${result.location}`}
+                    </h1>
+                    {tripDay && tripDay.nearby.length > 0 && (
+                        <p className="text-sm text-gray-600 mb-3">
+                            V {tripDay.towns.length > 1 ? 'vybraných obcích' : `obci ${tripDay.base.name}`} už program došel, proto jsme přidali i okolí: {tripDay.nearby.map(t => t.name).join(', ')}.
+                        </p>
+                    )}
+                    {tripDay && <p className="text-sm text-gray-500 mb-4">Start a návrat: ubytování v obci {tripDay.base.name}</p>}
 
                     {stay && stay.firstDay === activeDay && <StayCard stay={stay} />}
                     {stay && stay.firstDay !== activeDay && (
