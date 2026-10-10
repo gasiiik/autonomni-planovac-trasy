@@ -68,9 +68,9 @@ function initialForm(presetLocation: string | null): WizardForm {
             const form: WizardForm = JSON.parse(saved);
             // Staré zadání (jiný den nebo čas, který už proběhl) -> aktuální časy
             const fresh = form.date < localDate(new Date()) ? { ...form, ...defaultTimes() } : normalizeTimes(form);
-            // Poloha se nepamatuje - použije se jen po kliknutí na "Vyrazit z mé polohy".
-            // "Naplánovat výlet odsud" z detailu místa má přednost před posledním zadáním.
-            return { ...fresh, start: null, ...(presetLocation ? { location_id: presetLocation } : {}) };
+            // Výchozí místo se nepamatuje (obec, poloha ani obce dovolené) - uživatel ho vždy vybere sám.
+            // Výjimka: "Naplánovat výlet odsud" z detailu místa obec předvyplní.
+            return { ...fresh, start: null, location_id: presetLocation ?? '', vacation_towns: [] };
         }
     } catch {
         // poškozená data v session storage ignorujeme
