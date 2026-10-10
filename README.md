@@ -1,22 +1,40 @@
-# KrušnoPlán – plánovač výletů po Karlovarském kraji
+# KrušnoPlán – plánovač výletů a dovolené po Karlovarském kraji
 
-KrušnoPlán sestaví celodenní výlet na míru: zadáte datum, časové okno, výchozí obec, způsob dopravy a co vás zajímá, a aplikace naplánuje trasu se zastávkami a přesným harmonogramem. Plánovač pracuje s otevřenými daty Karlovarského kraje z DataZápadu (přes 400 turistických cílů) a hlídá otevírací dobu, sezónu, vstupné, rozpočet i předpověď počasí. Pomáhá turistům i místním objevit i méně známá místa bez dlouhého hledání.
+KrušnoPlán z otevřených dat Karlovarského kraje sestaví výlet nebo celou dovolenou na míru. Uživatel zadá, kolik má času, odkud vyráží, čím se přepravuje a co ho baví, a dostane hotový harmonogram: zastávky v pořadí, časy přesunů, mapu, navigaci, počasí a u dovolené i ubytování. Plánovač přitom hlídá otevírací dobu, sezónu, vstupné, rozpočet, děti i déšť.
+
+## Problém → uživatel → data → funkce → přínos
+
+| | |
+|---|---|
+| **Problém** | Informace o turistických cílech kraje jsou roztroušené po desítkách webů. Naplánovat den nebo dovolenou znamená zjišťovat, co je kde, kdy má otevřeno, kolik stojí a jak se mezi místy dostat. Návštěvníci proto končí na pár nejznámějších místech a menší památky a obce zůstávají stranou. |
+| **Uživatel** | Turisté a návštěvníci kraje, místní a rodiny s dětmi, kteří hledají, kam vyrazit. Nepřímo kraj, obce a turistická informační centra. |
+| **Data** | 23 datových sad z [DataZápadu](https://www.datazapad.cz/) – 462 turistických cílů (zámky, hrady, muzea, prameny, rozhledny, příroda, ZOO, aquaparky, lyžování, golf…). Doplněné o předpověď počasí, fotky, ubytování a mapové podklady (viz [Použitá data](#použitá-data)). |
+| **Funkce** | Plánovač jednodenního výletu a vícedenní dovolené přes více obcí, mapa všech míst s filtry, detail místa, kalendář akcí kraje, navigace do Google Maps / Mapy.cz / Apple Map, sdílení a export do kalendáře. |
+| **Přínos** | Uživatel ušetří čas a objeví i méně známá místa. Kraj a obce získají nástroj, který rozkládá návštěvnost po celém kraji a dá se nabízet v informačních centrech. |
+
+### Přínos pro kraj a veřejnou správu
+- **Propagace méně známých míst** – plánovač nenabízí jen „top 10“, ale i menší muzea, zříceniny, prameny a obce v okolí. Pomáhá rozložit turisty mimo nejvytíženější lokality.
+- **Nástroj pro informační centra** – pracovník infocentra může návštěvníkovi během minuty sestavit plán dne nebo pobytu a poslat mu ho odkazem.
+- **Hodnota otevřených dat** – ukazuje, že data, která kraj zveřejňuje (DataZápad), jdou proměnit v praktickou službu pro občany a návštěvníky.
+- **Možný další rozvoj** *(zatím není součástí prototypu)*: anonymní přehled, která místa lidé plánují nejčastěji – podklad pro kraj, kam směřovat propagaci nebo investice.
 
 ## Jak to funguje
 
-1. **Import dat** – skript [`import_datazapad.py`](backend/engine/scripts/import_datazapad.py) stáhne datové sady z DataZápadu přes ArcGIS REST API a převede je na místa pro plánovač. Z dat čte polohu, popis, adresu, web, **přístupnost** (nepřístupné objekty vynechá, zavřené zámky a kostely nabídne jen jako krátkou zastávku zvenku), **vstupné**, **otevírací dobu** a **sezónu** (koupaliště, lanová centra, rozhledny). Místo uvedené ve více sadách (např. klášter Teplá v NKP i v náboženských památkách) uloží jen jednou. Import lze spouštět opakovaně – data se aktualizují a záznamy, které z DataZápadu zmizely, se smažou.
-2. **Plánovač** ([`main.py`](backend/engine/app/main.py)) skládá trasu od výchozího bodu: vybírá nejbližší vhodné místo, počká na otevření (max. 60 min), oběd naplánuje mezi 11:30 a 14:00, nedá víc než 3 místa stejného typu za den, u okruhu hlídá čas na návrat a při dešti (předpověď Open-Meteo) upřednostní vnitřní aktivity. Když výlet nejde naplánovat, vysvětlí proč.
-3. **Frontend** (React) provede uživatele průvodcem nebo nabídne tematický výlet na jedno kliknutí. Výsledek zobrazí jako časovou osu s fotkami, adresami, předpovědí počasí u každé zastávky a mapou trasy; plán jde sdílet odkazem, uložit do kalendáře (.ics) nebo vytisknout a ke každé zastávce otevřít navigaci v Mapy.cz. **Mapa míst** ukazuje všechna místa z dat s filtry a každé místo má vlastní stránku s detailem. U každé zastávky uvádí datovou sadu DataZápadu, ze které pochází.
+1. **Import dat** – skript [`import_datazapad.py`](backend/engine/scripts/import_datazapad.py) stáhne datové sady z DataZápadu přes ArcGIS REST API a převede je na místa pro plánovač. Data nejen přebírá, ale **odvozuje z nich**, co plánovač potřebuje: **přístupnost** (nepřístupné objekty vynechá, zavřené zámky a kostely nabídne jen jako krátkou zastávku zvenku), **vstupné**, **otevírací dobu** a **sezónu** z textových poznámek, **místa uvnitř** pro deštivé dny. Místo uvedené ve více sadách (např. klášter Teplá v NKP i v náboženských památkách) uloží jen jednou. Import se spouští automaticky a opakovaně – data se aktualizují a záznamy, které z DataZápadu zmizely, se smažou.
+2. **Plánovač** ([`main.py`](backend/engine/app/main.py)) skládá trasu od výchozího bodu: vybírá vhodná místa v dosahu zvolené dopravy, počká na otevření, oběd naplánuje mezi 11:30 a 14:00, nedá víc než 3 místa stejného typu za den, u okruhu hlídá čas na návrat a podle hodinové předpovědi (Open-Meteo) upozorní na déšť nebo na přání nabídne jen místa uvnitř. Když výlet nejde naplánovat, vysvětlí proč.
+3. **Plánovač dovolené** rozdělí dny mezi vybrané obce (víc obcí než dní = výlet přes víc měst za den), každý den naplánuje okruh z ubytování bez opakování míst, a když v obci program dojde, přidá okolní obce. U každé obce nabídne ubytování z OpenStreetMap.
+4. **Frontend** (React) provede uživatele průvodcem pro výlet nebo dovolenou, případně nabídne hotový tematický výlet. Výsledek ukazuje časovou osu s fotkami, adresami a počasím, mapu trasy, navigaci a u každé zastávky **datovou sadu DataZápadu, ze které pochází**.
 
 ```
 frontend (React, :5173) → PHP gateway (:8080) → Python engine (FastAPI, :8000) → MariaDB
                                                        ↑
-                                    import_datazapad.py ← DataZápad (ArcGIS REST API)
+                     import_datazapad.py ← DataZápad (ArcGIS REST API)
+                     import_ubytovani.py ← OpenStreetMap (Overpass API)
 ```
 
 ## Použitá data
 
-Všechny sady pocházejí z [Katalogu otevřených dat Karlovarského kraje – DataZápad](https://www.datazapad.cz/search?collection=dataset&layout=grid). Data jsme upravili: převedli na jednotný formát, vyřadili nepřístupná místa, sloučili duplicity a z textových polí odvodili otevírací dobu, sezónu a vstupné. Počty udávají místa, která po zpracování používá plánovač.
+**Jádrem aplikace jsou data DataZápadu** – všechna místa, ze kterých plánovač skládá výlety (462 z 473), pocházejí z následujících sad. Ostatní zdroje (níže) je jen doplňují. Všechny sady pocházejí z [Katalogu otevřených dat Karlovarského kraje – DataZápad](https://www.datazapad.cz/search?collection=dataset&layout=grid). Data jsme upravili: převedli na jednotný formát, vyřadili nepřístupná místa, sloučili duplicity a z textových polí odvodili otevírací dobu, sezónu a vstupné. Počty udávají místa, která po zpracování používá plánovač.
 
 | Datová sada | Míst | Licence |
 |---|---:|---|
@@ -46,14 +64,17 @@ Všechny sady pocházejí z [Katalogu otevřených dat Karlovarského kraje – 
 
 \* Sada UNESCO obsahuje hlavně celoplošné položky (lázeňská města, hornická krajina, geopark), které nejsou zastávkou na trase. Jediný bodový objekt (Kynžvartská daguerrotypie) se sloučil se záznamem Zámku Kynžvart.
 
-**Další zdroje:**
-- Předpověď počasí: [Open-Meteo](https://open-meteo.com/), CC BY 4.0
-- Fotky míst: [Wikipedie](https://cs.wikipedia.org/) a [Wikimedia Commons](https://commons.wikimedia.org/) – odkazujeme na náhledy, licence podle jednotlivých souborů (většinou CC BY-SA). Fotka se přiřadí jen při shodě názvu a polohy. Když tam fotka není, použije se náhledový obrázek (og:image) z oficiálního webu místa uvedeného v DataZápadu – patří provozovateli webu a u fotky je uveden zdroj.
-- Mapové podklady: © přispěvatelé [OpenStreetMap](https://www.openstreetmap.org/copyright), ODbL
+**Doplňkové zdroje** (DataZápad je nemá, plánovač je jen doplňují):
+- Ubytování pro plánovač dovolené: [OpenStreetMap](https://www.openstreetmap.org/copyright) přes Overpass API, ODbL – hotely, penziony, apartmány, chaty a kempy (DataZápad obsahuje o ubytování jen souhrnné statistiky).
+- Předpověď počasí: [Open-Meteo](https://open-meteo.com/), CC BY 4.0.
+- Fotky míst: [Wikipedie](https://cs.wikipedia.org/), [Wikimedia Commons](https://commons.wikimedia.org/) a [Wikidata](https://www.wikidata.org/) – odkazujeme na náhledy, licence podle jednotlivých souborů (většinou CC BY-SA). Fotka se přiřadí jen při shodě názvu a polohy. Když tam fotka není, použije se náhledový obrázek z oficiálního webu místa uvedeného v DataZápadu – patří provozovateli webu a u fotky je uveden zdroj.
+- Kalendář akcí: odkazy do oficiálního kalendáře kraje [Kam na západě](https://kamnazapade.cz/) – data nepřebíráme, jen na kalendář odkazujeme.
+- Mapové podklady: © přispěvatelé [OpenStreetMap](https://www.openstreetmap.org/copyright), ODbL.
 
 ## Použití AI
 
-- **Claude Code (Anthropic)** – návrh a implementace importu DataZápadu (čtení přístupnosti, vstupného, otevírací doby a sezóny z dat, slučování duplicit, dohledávání fotek), napojení React frontendu na backend, mapa trasy, revize kódu a opravy chyb v plánovači (časové pásmo, čekání na otevření, rozmanitost zastávek, plánování při dešti).
+- **Claude Code (Anthropic)** – návrh a implementace importu DataZápadu (čtení přístupnosti, vstupného, otevírací doby a sezóny z dat, slučování duplicit, dohledávání fotek), importu ubytování z OpenStreetMap, plánovače dovolené, napojení React frontendu na backend, map a navigace, revize kódu a opravy chyb v plánovači. Výstupy AI tým kontroloval a testoval.
+- <další nástroje AI, které tým použil, a k čemu>
 
 ## Spuštění
 
@@ -64,7 +85,7 @@ cd backend
 docker compose up -d --build
 ```
 
-Data z DataZápadu se stáhnou **automaticky** při startu enginu – při prvním spuštění (cca 10 minut včetně fotek) a pak vždy, když jsou starší než 7 dní (`AUTO_IMPORT_MAX_AGE_DAYS` v `docker-compose.yml`, vypnutí `AUTO_IMPORT=0`). Aplikace mezitím běží, průběh uvidíte v `docker compose logs -f python_engine`.
+Data z DataZápadu i ubytování z OpenStreetMap se stáhnou **automaticky** při startu enginu – při prvním spuštění (cca 10 minut včetně fotek) a pak vždy, když jsou starší než 7 dní (`AUTO_IMPORT_MAX_AGE_DAYS` v `docker-compose.yml`, vypnutí `AUTO_IMPORT=0`). Aplikace mezitím běží, průběh uvidíte v `docker compose logs -f python_engine`.
 
 Ruční spuštění importu:
 ```bash

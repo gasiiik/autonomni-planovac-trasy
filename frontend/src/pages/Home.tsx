@@ -6,7 +6,10 @@ import { CATEGORY_LABELS, THEMES, TRANSPORT_LABELS } from '../constants';
 import { CategoryTag } from '../components/Icons';
 import type { Theme } from '../constants';
 import { defaultTimes, resultUrl } from '../utils/plan';
-import { ArrowRight, CalendarClock, CalendarRange, CloudSun, Coins, Repeat, Sun, UtensilsCrossed } from 'lucide-react';
+import {
+    ArrowRight, Building2, CalendarCheck, CalendarClock, CalendarRange, CloudSun, Coins, Database, DoorOpen, Layers,
+    Luggage, Repeat, ShieldCheck, Sun, Ticket, Umbrella, Users, UtensilsCrossed,
+} from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import DataCounter from '../components/DataCounter';
 import PlaceImage from '../components/PlaceImage';
@@ -25,6 +28,35 @@ const FEATURES: [LucideIcon, string][] = [
     [UtensilsCrossed, 'Oběd mezi 11:30 a 14:00'],
     [Coins, 'Rozpočet a vstupné'],
     [Repeat, 'Čas na návrat zpět do startu'],
+];
+
+// Pro koho je aplikace: problém -> přínos (osnova hodnocení hackathonu)
+const AUDIENCES: { icon: LucideIcon; who: string; problem: string; benefit: string }[] = [
+    {
+        icon: Luggage, who: 'Turisté a návštěvníci kraje',
+        problem: 'Neznají kraj a plánování výletu je stojí hodinu na desítkách webů – co je kde, kdy má otevřeno, kolik stojí.',
+        benefit: 'Zadají, kolik mají času a co je baví, a dostanou hotový harmonogram s mapou, navigací a ubytováním.',
+    },
+    {
+        icon: Users, who: 'Místní a rodiny s dětmi',
+        problem: 'Chtějí na víkend vyrazit jinam než na známá místa, ale nevědí kam – a co dělat, když prší.',
+        benefit: 'Objeví i méně známá místa v okolí, plán se přizpůsobí dětem, rozpočtu i počasí.',
+    },
+    {
+        icon: Building2, who: 'Kraj, obce a infocentra',
+        problem: 'Turisté se tlačí na pár nejznámějších místech, menší památky a obce zůstávají stranou.',
+        benefit: 'Plánovač nabízí i méně známá místa a rozkládá návštěvnost po kraji. Infocentra ho mohou nabízet návštěvníkům.',
+    },
+];
+
+// Co z otevřených dat DataZápadu odvozujeme (data nejen zobrazujeme)
+const DERIVED: [LucideIcon, string][] = [
+    [ShieldCheck, 'přístupnost – nepřístupné objekty vynecháme'],
+    [DoorOpen, 'otevírací dobu z textových poznámek'],
+    [CalendarCheck, 'sezónu – koupaliště, lanová centra, lyžování'],
+    [Ticket, 'vstupné – zdarma, nebo placené'],
+    [Umbrella, 'místa uvnitř pro deštivé dny'],
+    [Layers, 'jedno místo ve více sadách sloučíme'],
 ];
 
 const STEPS: [string, string][] = [
@@ -195,6 +227,34 @@ export default function Home() {
                 </section>
             )}
 
+            {/* Pro koho - problém a přínos */}
+            <section className="py-16 md:py-24 px-4 bg-white">
+                <div className="container mx-auto max-w-6xl">
+                    <p className="text-sm font-semibold uppercase tracking-widest text-primary">Proč KrušnoPlán</p>
+                    <h2 className="text-3xl md:text-4xl font-bold text-primary-dark mt-1 mb-4 max-w-3xl leading-tight">
+                        Naplánovat výlet po kraji nemá zabrat víc času než výlet samotný
+                    </h2>
+                    <p className="text-lg text-gray-700 max-w-3xl mb-10 leading-relaxed">
+                        Informace o hradech, muzeích, pramenech a rozhlednách jsou roztroušené po desítkách webů. Kraj je ale má
+                        pohromadě v otevřených datech – KrušnoPlán z nich za pár vteřin sestaví plán na míru.
+                    </p>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        {AUDIENCES.map(a => (
+                            <div key={a.who} className="rounded-3xl border border-secondary bg-secondary/40 p-6 flex flex-col">
+                                <span className="flex items-center justify-center w-12 h-12 rounded-2xl bg-primary text-accent mb-4">
+                                    <a.icon size={24} aria-hidden="true" />
+                                </span>
+                                <h3 className="text-xl font-bold text-primary-dark mb-3">{a.who}</h3>
+                                <p className="text-sm font-semibold uppercase tracking-wide text-gray-500 mb-1">Problém</p>
+                                <p className="text-gray-700 mb-4">{a.problem}</p>
+                                <p className="text-sm font-semibold uppercase tracking-wide text-primary mb-1">Přínos</p>
+                                <p className="text-gray-800">{a.benefit}</p>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </section>
+
             {/* Jak to funguje */}
             <section id="jak-to-funguje" className="py-16 md:py-24 px-4 bg-white scroll-mt-24">
                 <div className="container mx-auto max-w-6xl grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-16 items-start">
@@ -237,6 +297,41 @@ export default function Home() {
                             </li>
                         ))}
                     </ol>
+                </div>
+
+                {/* Postaveno na otevřených datech - čísla živě z databáze */}
+                <div className="container mx-auto max-w-6xl mt-14 rounded-3xl bg-primary-dark text-white p-6 md:p-10">
+                    <div className="flex flex-col lg:flex-row gap-8 lg:gap-12">
+                        <div className="lg:w-2/5">
+                            <p className="flex items-center gap-2 text-sm font-semibold uppercase tracking-widest text-accent">
+                                <Database size={16} aria-hidden="true" /> Otevřená data
+                            </p>
+                            <h3 className="text-2xl md:text-3xl font-bold mt-2 mb-4 leading-tight">Postaveno na datech Karlovarského kraje</h3>
+                            {stats && (
+                                <div className="flex gap-8 mb-4">
+                                    <div><p className="text-4xl font-extrabold text-accent">{stats.places_from_datazapad}</p><p className="text-white/80 text-sm">míst z DataZápadu</p></div>
+                                    <div><p className="text-4xl font-extrabold text-accent">{stats.datasets.length}</p><p className="text-white/80 text-sm">datových sad</p></div>
+                                </div>
+                            )}
+                            <p className="text-white/80 text-sm leading-relaxed">
+                                Jádrem plánovače jsou otevřená data z{' '}
+                                <a href="https://www.datazapad.cz/" target="_blank" rel="noopener noreferrer" className="underline hover:text-accent">DataZápadu</a>
+                                {' '}– hrady, zámky, muzea, prameny, rozhledny, příroda i zábava. Doplňují je předpověď počasí (Open-Meteo),
+                                fotky (Wikimedia), ubytování a mapy (OpenStreetMap) a odkazy do kalendáře akcí kraje.
+                            </p>
+                        </div>
+                        <div className="lg:w-3/5">
+                            <p className="font-semibold mb-4">Data nejen zobrazujeme – vyčteme z nich, co plánovač potřebuje:</p>
+                            <ul className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                {DERIVED.map(([Icon, text]) => (
+                                    <li key={text} className="flex items-start gap-3 bg-white/10 rounded-xl p-3">
+                                        <Icon size={20} className="text-accent shrink-0 mt-0.5" aria-hidden="true" />
+                                        <span className="text-white/90">{text}</span>
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                    </div>
                 </div>
             </section>
         </div>
