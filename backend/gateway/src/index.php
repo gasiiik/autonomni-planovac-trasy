@@ -125,6 +125,15 @@ if ($request_uri === '/api/locations' && $method === 'GET') {
     forward_to_engine('/internal/locations');
 }
 
+// Ubytování v okolí (dovolená) - parametry lat, lng, limit
+if ($request_uri === '/api/accommodation' && $method === 'GET') {
+    forward_to_engine('/internal/accommodation?' . http_build_query([
+        'lat' => (float)($_GET['lat'] ?? 0),
+        'lng' => (float)($_GET['lng'] ?? 0),
+        'limit' => (int)($_GET['limit'] ?? 6),
+    ]));
+}
+
 // Místa pro mapu a detail místa
 if ($request_uri === '/api/places' && $method === 'GET') {
     forward_to_engine('/internal/places');

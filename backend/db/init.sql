@@ -39,6 +39,19 @@ CREATE TABLE IF NOT EXISTS activity_pois (
     FOREIGN KEY (location_id) REFERENCES locations(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS accommodations (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    osm_id VARCHAR(40) UNIQUE,                -- OpenStreetMap, např. "node/123456"
+    name VARCHAR(200),
+    kind VARCHAR(20),                         -- hotel, guest_house, apartment, chalet, hostel, motel, camp_site
+    lat FLOAT,
+    lng FLOAT,
+    stars INT,
+    website VARCHAR(255),
+    phone VARCHAR(50),
+    address VARCHAR(255)
+);
+
 CREATE TABLE IF NOT EXISTS datasets (
     service VARCHAR(150) PRIMARY KEY,         -- název ArcGIS služby = prefix activity_pois.external_id
     title VARCHAR(255),

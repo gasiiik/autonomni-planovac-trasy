@@ -19,6 +19,28 @@ export interface PlanRequest {
     participants_count?: number;
     has_children?: boolean;
     indoor_when_rain?: boolean;
+    exclude_ids?: number[];          // místa navštívená v předchozích dnech dovolené
+    vacation?: VacationRequest | null; // jen frontend: plán dovolené (backend neznámá pole ignoruje)
+}
+
+export interface VacationRequest {
+    towns: number[];       // obce v pořadí návštěvy
+    days: number;          // délka dovolené ve dnech
+    daily_from?: string;   // "HH:MM:SS" - od kdy se plánuje 2. a další dny
+}
+
+export interface AccommodationOption {
+    id: number;
+    name: string;
+    kind: string;
+    kind_label: string;
+    lat: number;
+    lng: number;
+    stars: number | null;
+    website: string | null;
+    phone: string | null;
+    address: string | null;
+    distance_km: number;
 }
 
 export interface Waypoint {

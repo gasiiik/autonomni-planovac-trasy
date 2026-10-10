@@ -11,7 +11,7 @@ import urllib.request
 import json
 
 from .database import get_db
-from .models import Location, ActivityPOI, Dataset
+from .models import Location, ActivityPOI, Dataset, Accommodation
 from . import auto_import
 
 @asynccontextmanager
@@ -53,6 +53,7 @@ class PlanRequest(BaseModel):
     difficulty: Optional[str] = "EASY"
     participants_count: Optional[int] = 1
     has_children: Optional[bool] = False
+    exclude_ids: Optional[List[int]] = []  # místa navštívená v předchozích dnech dovolené
     indoor_when_rain: Optional[bool] = False # při dešti jen místa uvnitř (volba uživatele)
 
 def haversine_distance(lat1, lon1, lat2, lon2):
@@ -161,6 +162,29 @@ def get_place(poi_id: int, db: Session = Depends(get_db)):
                              "distance_km": round(haversine_distance(p.lat, p.lng, nearest.lat, nearest.lng), 1)},
     }
 
+ACCOMMODATION_KINDS = {
+    "hotel": "Hotel", "guest_house": "Penzion", "apartment": "Apartmán", "chalet": "Chata",
+    "hostel": "Hostel", "motel": "Motel", "camp_site": "Kemp",
+}
+
+@app.get("/internal/accommodation")
+def get_accommodation(lat: float, lng: float, limit: int = 6, radius_km: float = 8.0, db: Session = Depends(get_db)):
+    """Nejbližší ubytování k místu (OpenStreetMap). Přednost mají ta s webem a hvězdičkami."""
+    try:
+        stays = db.query(Accommodation).all()
+    except Exception:
+        db.rollback()
+        return []
+    near = [(haversine_distance(lat, lng, a.lat, a.lng), a) for a in stays]
+    near = [(d, a) for d, a in near if d <= radius_km]
+    # Řazení: vzdálenost, ale ubytování s webem/hvězdičkami (snáz se rezervuje) mírně dopředu
+    near.sort(key=lambda da: da[0] - (0.4 if da[1].website else 0) - 0.1 * (da[1].stars or 0))
+    return [{
+        "id": a.id, "name": a.name, "kind": a.kind, "kind_label": ACCOMMODATION_KINDS.get(a.kind, "Ubytování"),
+        "lat": a.lat, "lng": a.lng, "stars": a.stars, "website": a.website, "phone": a.phone,
+        "address": a.address, "distance_km": round(d, 1),
+    } for d, a in near[:max(1, min(limit, 20))]]
+
 def dataset_sources(db: Session) -> dict:
     """external_id prefix (ArcGIS služba) -> uvedení zdroje u místa"""
     try:
@@ -204,7 +228,9 @@ def generate_plan(req: PlanRequest, db: Session = Depends(get_db)):
     radius_km = SEARCH_RADIUS_KM.get(req.transport_mode.upper(), 3.0)
     candidates = db.query(ActivityPOI).filter(ActivityPOI.category.in_(req.interests)).all()
     # Jen podle skutečné vzdálenosti - obec může mít katastr přes 6 km (pěšky by to byl nesmysl)
-    pois = [p for p in candidates if haversine_distance(loc.lat, loc.lng, p.lat, p.lng) <= radius_km]
+    excluded = set(req.exclude_ids or [])
+    pois = [p for p in candidates
+            if p.id not in excluded and haversine_distance(loc.lat, loc.lng, p.lat, p.lng) <= radius_km]
     # Sezónní místa (lanová centra, koupaliště, rozhledny) mimo sezónu vyřadíme
     out_of_season = [p for p in pois if not in_season(p, t_from)]
     pois = [p for p in pois if in_season(p, t_from)]

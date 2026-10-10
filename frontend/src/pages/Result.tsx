@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import type { ItineraryItem, PlanRequest, PlanResponse } from '../types/api';
 import { generatePlan } from '../services/apiClient';
-import { CalendarDays, CalendarPlus, Check, Clock, CloudRain, CloudSun, ExternalLink, MapPin, Navigation, Printer, Share2, Sun } from 'lucide-react';
+import { BedDouble, CalendarDays, CalendarPlus, Check, Clock, CloudRain, CloudSun, ExternalLink, MapPin, Navigation, Printer, Share2, Sun } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { CATEGORY_LABELS, TRANSPORT_LABELS } from '../constants';
 import { CategoryTag, TransportIcon, WeatherIcon } from '../components/Icons';
@@ -10,6 +10,8 @@ import { decodePlan } from '../utils/plan';
 import { downloadIcs } from '../utils/calendar';
 import { applePlaceNavUrl, appleRouteUrl, googlePlaceNavUrl, googleRouteUrl, mapyPlaceNavUrl, mapyRouteUrl, tooManyForGoogle } from '../utils/navigation';
 import { cityEventsUrl, townFromStartName, EVENTS_CALENDAR_URL } from '../utils/events';
+import { planVacation } from '../utils/vacation';
+import type { Stay, Trip } from '../utils/vacation';
 import RouteMap from '../components/RouteMap';
 import PlaceImage from '../components/PlaceImage';
 
@@ -121,6 +123,44 @@ function PoiItem({ item, order, transport }: { item: ItineraryItem; order: numbe
     );
 }
 
+// Nabídka ubytování v obci (OpenStreetMap)
+function StayCard({ stay }: { stay: Stay }) {
+    const nights = stay.days;
+    return (
+        <div className="bg-white border-2 border-accent rounded-2xl p-5 mb-4">
+            <p className="font-bold text-primary-dark flex items-center gap-2 mb-1">
+                <BedDouble size={20} className="text-primary" aria-hidden="true" /> Ubytování v obci {stay.town.name}
+            </p>
+            <p className="text-sm text-gray-500 mb-3">
+                {nights} {nights === 1 ? 'noc' : nights < 5 ? 'noci' : 'nocí'} · tipy z OpenStreetMap seřazené podle vzdálenosti od centra
+            </p>
+            {stay.options.length === 0 ? (
+                <p className="text-sm text-gray-600">V okolí jsme ubytování nenašli – zkus{' '}
+                    <a href={`https://mapy.cz/zakladni?q=${encodeURIComponent('ubytování ' + stay.town.name)}`} target="_blank" rel="noopener noreferrer" className="text-primary underline">hledání na Mapy.cz</a>.
+                </p>
+            ) : (
+                <ul className="space-y-2">
+                    {stay.options.map(a => (
+                        <li key={a.id} className="flex items-start justify-between gap-3 p-3 rounded-xl bg-secondary/60">
+                            <div className="min-w-0">
+                                <p className="font-semibold text-primary-dark truncate">{a.name}</p>
+                                <p className="text-xs text-gray-600">
+                                    {a.kind_label}{a.stars ? ` · ${'★'.repeat(a.stars)}` : ''} · {a.distance_km} km od centra
+                                    {a.address ? ` · ${a.address}` : ''}
+                                </p>
+                            </div>
+                            <div className="flex gap-3 shrink-0 text-sm font-semibold">
+                                {a.website && <a href={a.website} target="_blank" rel="noopener noreferrer" className="text-primary underline">Web</a>}
+                                <a href={`https://mapy.cz/zakladni?q=${encodeURIComponent(a.name + ' ' + stay.town.name)}`} target="_blank" rel="noopener noreferrer" className="text-primary underline">Mapa</a>
+                            </div>
+                        </li>
+                    ))}
+                </ul>
+            )}
+        </div>
+    );
+}
+
 // Plán z URL (?plan=..., sdílitelný odkaz), starší verze ukládala požadavek do session storage
 function readRequest(params: URLSearchParams): PlanRequest | null {
     const encoded = params.get('plan');
@@ -136,7 +176,9 @@ function readRequest(params: URLSearchParams): PlanRequest | null {
 export default function Result() {
     const [searchParams] = useSearchParams();
     const [request] = useState(() => readRequest(searchParams));
-    const [result, setResult] = useState<PlanResponse | null>(null);
+    const [single, setSingle] = useState<PlanResponse | null>(null);
+    const [trip, setTrip] = useState<Trip | null>(null);       // dovolená (více dní)
+    const [activeDay, setActiveDay] = useState(0);
     const [loading, setLoading] = useState(request !== null);
     const [error, setError] = useState(request ? '' : 'Žádná data k plánování – projdi nejdřív průvodce.');
     const [activeStop, setActiveStop] = useState<number | null>(null);
@@ -145,12 +187,17 @@ export default function Result() {
     useEffect(() => {
         if (!request) return;
         let cancelled = false;
-        generatePlan(request)
-            .then(res => { if (!cancelled) setResult(res); })
+        const work = request.vacation?.towns?.length
+            ? planVacation(request).then(t => { if (!cancelled) setTrip(t); })
+            : generatePlan(request).then(res => { if (!cancelled) setSingle(res); });
+        work
             .catch(err => { if (!cancelled) setError(err.message); })
             .finally(() => { if (!cancelled) setLoading(false); });
         return () => { cancelled = true; };
     }, [request]);
+
+    const tripDay = trip?.days[activeDay] ?? null;
+    const result = tripDay?.plan ?? single;
 
     // Klik na značku v mapě -> posun seznamu na zastávku
     const selectStop = useCallback((n: number) => {
@@ -194,7 +241,8 @@ export default function Result() {
     const totalKm = result.itinerary.reduce((sum, i) => sum + (i.distance_km ?? 0), 0);
     // Čekání na otevření (např. při odjezdu v noci) nepočítáme do času výletu
     const waitMins = result.itinerary.filter(i => i.type === 'wait').reduce((sum, i) => sum + i.duration_mins, 0);
-    const date = request.time_from.slice(0, 10);
+    const date = tripDay?.date ?? request.time_from.slice(0, 10);
+    const stay = trip?.stays.find(s => activeDay >= s.firstDay && activeDay < s.firstDay + s.days) ?? null;
     let stopNo = 0;
 
     return (
@@ -202,8 +250,31 @@ export default function Result() {
             <div className="flex flex-col lg:flex-row gap-8">
                 {/* Itinerář */}
                 <div className="lg:w-1/2">
+                    {trip && (
+                        <div className="mb-6 print:hidden">
+                            <p className="text-sm font-semibold uppercase tracking-widest text-primary">Dovolená · {trip.days.length} {trip.days.length === 1 ? 'den' : trip.days.length < 5 ? 'dny' : 'dní'}</p>
+                            <p className="text-gray-600 mt-1 mb-4">{trip.stays.map(s => `${s.town.name} (${s.days} ${s.days === 1 ? 'den' : s.days < 5 ? 'dny' : 'dní'})`).join(' → ')}</p>
+                            <div className="flex flex-wrap gap-2" role="tablist">
+                                {trip.days.map((d, i) => (
+                                    <button key={d.date} role="tab" aria-selected={i === activeDay}
+                                        onClick={() => { setActiveDay(i); setActiveStop(null); }}
+                                        className={`px-4 py-2 rounded-full text-sm font-semibold transition ${i === activeDay ? 'bg-primary text-white' : 'bg-secondary text-primary-dark hover:bg-primary/20'}`}>
+                                        Den {i + 1} · {new Date(d.date).toLocaleDateString('cs-CZ', { weekday: 'short', day: 'numeric', month: 'numeric' })}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    )}
                     <p className="text-gray-500">{new Date(date).toLocaleDateString('cs-CZ', { weekday: 'long', day: 'numeric', month: 'long' })} · {TRANSPORT_LABELS[request.transport_mode].toLowerCase()}</p>
-                    <h1 className="text-3xl font-bold text-primary-dark mb-4">Tvůj výlet: {result.location}</h1>
+                    <h1 className="text-3xl font-bold text-primary-dark mb-4">{trip ? `Den ${activeDay + 1}: ${result.location}` : `Tvůj výlet: ${result.location}`}</h1>
+
+                    {stay && stay.firstDay === activeDay && <StayCard stay={stay} />}
+                    {stay && stay.firstDay !== activeDay && (
+                        <p className="text-sm text-gray-600 mb-4 flex items-center gap-2">
+                            <BedDouble size={16} className="text-primary" aria-hidden="true" />
+                            Bydlíš dál v obci {stay.town.name} – ubytování najdeš u dne {stay.firstDay + 1}.
+                        </p>
+                    )}
 
                     <div className={`p-4 rounded-xl mb-4 flex items-start gap-3 ${WEATHER_STYLES[result.weather_status]}`}>
                         {(() => { const Icon = WEATHER_ICONS[result.weather_status]; return <Icon size={22} className="shrink-0 mt-0.5" aria-hidden="true" />; })()}
@@ -321,7 +392,7 @@ export default function Result() {
                 {/* Mapa */}
                 <div className="lg:w-1/2 print:hidden">
                     <div className="sticky top-28 rounded-3xl h-[450px] lg:h-[calc(100vh-8rem)] overflow-hidden shadow-lg border border-secondary z-0">
-                        <RouteMap waypoints={result.waypoints} activeStop={activeStop} onSelectStop={selectStop} />
+                        <RouteMap key={activeDay} waypoints={result.waypoints} activeStop={activeStop} onSelectStop={selectStop} />
                         {stops.length > 0 && (
                             <div className="absolute top-3 right-3 z-[1000] flex gap-2">
                                 <a href={googleRouteUrl(result.waypoints, request.transport_mode)} target="_blank" rel="noopener noreferrer" className={MAP_BTN}>

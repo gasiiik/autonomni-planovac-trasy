@@ -41,6 +41,21 @@ class ActivityPOI(Base):
     location = relationship("Location")
 
 
+class Accommodation(Base):
+    """Ubytování z OpenStreetMap (hotely, penziony, apartmány, chaty, kempy) - pro plánování dovolené."""
+    __tablename__ = "accommodations"
+    id = Column(Integer, primary_key=True, index=True)
+    osm_id = Column(String(40), unique=True) # např. "node/123456" - opakovaný import bez duplicit
+    name = Column(String(200))
+    kind = Column(String(20))                # hotel, guest_house, apartment, chalet, hostel, motel, camp_site
+    lat = Column(Float)
+    lng = Column(Float)
+    stars = Column(Integer)
+    website = Column(String(255))
+    phone = Column(String(50))
+    address = Column(String(255))
+
+
 class Dataset(Base):
     """Metadata datové sady z DataZápad - pro uvedení zdroje u míst a stránku "O datech"."""
     __tablename__ = "datasets"

@@ -14,7 +14,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import func, text
 
 from .database import SessionLocal, engine
-from .models import Dataset
+from .models import Accommodation, Dataset
 
 MAX_AGE_DAYS = int(os.getenv("AUTO_IMPORT_MAX_AGE_DAYS", "7"))
 
@@ -47,6 +47,20 @@ def _run():
         state["last_error"] = "Databáze není dostupná."
         return
     Dataset.__table__.create(bind=engine, checkfirst=True)
+    Accommodation.__table__.create(bind=engine, checkfirst=True)
+
+    # Ubytování z OpenStreetMap (pro dovolenou) - stačí jednou, když v DB ještě žádné není
+    db = SessionLocal()
+    try:
+        has_stays = db.query(Accommodation).first() is not None
+    finally:
+        db.close()
+    if not has_stays:
+        try:
+            from scripts.import_ubytovani import run_import as import_stays
+            import_stays()
+        except Exception:
+            traceback.print_exc()
 
     last = last_import()
     now = datetime.now(ZoneInfo("Europe/Prague")).replace(tzinfo=None)
