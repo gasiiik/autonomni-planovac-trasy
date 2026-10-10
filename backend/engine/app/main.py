@@ -45,10 +45,18 @@ def get_locations(db: Session = Depends(get_db)):
 def generate_plan(req: PlanRequest, db: Session = Depends(get_db)):
     t_from = datetime.strptime(req.time_from, "%Y-%m-%d %H:%M:%S")
     t_to = datetime.strptime(req.time_to, "%Y-%m-%d %H:%M:%S")
+    
+    # Validace: Nelze plánovat do minulosti
+    now = datetime.now()
+    if t_from.date() < now.date():
+        raise HTTPException(status_code=400, detail="Nelze plánovat trasu na datum v minulosti.")
+    if t_from.date() == now.date() and t_from.time() < now.time():
+        raise HTTPException(status_code=400, detail="Nelze plánovat trasu na čas, který již dnes proběhl.")
+
     total_mins = int((t_to - t_from).total_seconds() / 60)
     
     if total_mins <= 0:
-        raise HTTPException(status_code=400, detail="Čas 'do' musí být větší než aktuální čas.")
+        raise HTTPException(status_code=400, detail="Čas 'do' musí být větší než čas 'od'.")
 
     # Filtrujeme aktivity podle vybraných preferencí
     pois = db.query(ActivityPOI).filter(
@@ -60,18 +68,33 @@ def generate_plan(req: PlanRequest, db: Session = Depends(get_db)):
     if not loc:
         raise HTTPException(status_code=404, detail="Lokace nenalezena.")
 
-    itinerary = []
+    # Klonování listu POI pro algoritmus "Nejbližší soused" (Nearest Neighbor)
+    unvisited = pois[:]
+    
     current_time = t_from
     remaining_mins = total_mins
     
     start_lat, start_lng = loc.lat, loc.lng
     curr_lat, curr_lng = start_lat, start_lng
     
-    # Uložení pro frontendovou mapu (Google Maps / Leaflet)
     waypoints_for_map = [{"lat": start_lat, "lng": start_lng, "name": loc.name, "type": "START"}]
+    itinerary = []
 
-    for poi in pois:
-        dist_km = haversine_distance(curr_lat, curr_lng, poi.lat, poi.lng)
+    while unvisited:
+        # Najdi nejbližší památku k aktuální poloze
+        closest_poi = None
+        min_dist = float('inf')
+        
+        for p in unvisited:
+            dist = haversine_distance(curr_lat, curr_lng, p.lat, p.lng)
+            if dist < min_dist:
+                min_dist = dist
+                closest_poi = p
+                
+        poi = closest_poi
+        unvisited.remove(poi)
+
+        dist_km = min_dist
         travel_time = calc_travel_time(dist_km, req.transport_mode)
         
         # Pokud je to OKRUH, musíme si nechat rezervu na návrat
@@ -105,7 +128,8 @@ def generate_plan(req: PlanRequest, db: Session = Depends(get_db)):
                 "category": poi.category,
                 "duration_mins": poi.est_duration_mins,
                 "lat": poi.lat,
-                "lng": poi.lng
+                "lng": poi.lng,
+                "image_url": poi.image_url
             })
             waypoints_for_map.append({"lat": poi.lat, "lng": poi.lng, "name": poi.name, "type": "POI"})
             
