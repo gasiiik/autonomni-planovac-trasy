@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
-import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
+import { useCallback, useEffect, useState } from 'react';
+import { Outlet, Link, useLocation } from 'react-router-dom';
 import { Heart } from 'lucide-react';
 import { useFavorites } from '../utils/favorites';
+import HelpDrawer from '../components/HowItWorks';
 
 // Stránky s vrstevnicemi na pozadí (průvodci a oblíbené)
 const TOPO_PAGES = ['/wizard', '/dovolena', '/oblibene'];
@@ -11,9 +12,12 @@ export default function Layout() {
     const [lastScrollY, setLastScrollY] = useState(0);
     const { pathname } = useLocation();
     const favorites = useFavorites();
-    const navigate = useNavigate();
+    // Lišta s nápovědou je otevřená jen na stránce, kde se otevřela (při přechodu jinam se zavře)
+    const [helpOpenOn, setHelpOpenOn] = useState<string | null>(null);
+    const helpOpen = helpOpenOn === pathname;
+    const closeHelp = useCallback(() => setHelpOpenOn(null), []);
 
-    // Otazník vždy posune na sekci "Jak to funguje" - i opakovaně a z jiné stránky
+    // Otazník: na úvodní stránce posune na sekci "Jak to funguje", jinde vyjede boční lišta s nápovědou
     const showHowItWorks = (e: React.MouseEvent) => {
         e.preventDefault();
         const scroll = (tries = 0) => {
@@ -23,10 +27,7 @@ export default function Layout() {
             if (content) window.scrollTo({ top: content.getBoundingClientRect().top + window.scrollY - 56, behavior: 'smooth' });
             else if (tries < 40) setTimeout(() => scroll(tries + 1), 50);   // úvodní stránka se ještě vykresluje
         };
-        if (pathname !== '/') {
-            navigate('/');
-            setTimeout(() => scroll(40), 800);   // dorovnání, kdyby se nad sekcí ještě donačetly fotky
-        }
+        if (pathname !== '/') return setHelpOpenOn(helpOpen ? null : pathname);
         scroll();
     };
 
@@ -80,6 +81,8 @@ export default function Layout() {
             <a href="/#jak-to-funguje" onClick={showHowItWorks} className="print:hidden fixed top-6 left-4 md:left-6 z-50 bg-primary text-white w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center shadow-lg hover:bg-primary-dark hover:scale-110 transition-all font-bold text-xl" title="Jak to funguje">
                 ?
             </a>
+
+            <HelpDrawer open={helpOpen} onClose={closeHelp} />
 
             <main className={`flex-grow ${TOPO_PAGES.includes(pathname) ? 'topo-bg' : 'bg-[#FFFFFF]'}`}>
                 <Outlet />

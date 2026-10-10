@@ -2,12 +2,11 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import type { DatasetsResponse, Place } from '../types/api';
 import { fetchDatasets, fetchLocations, fetchPlaces } from '../services/apiClient';
-import { CATEGORY_LABELS, THEMES, TRANSPORT_LABELS } from '../constants';
+import { CATEGORY_LABELS, FEATURES, STEPS, THEMES, TRANSPORT_LABELS } from '../constants';
 import { CategoryTag } from '../components/Icons';
 import type { Theme } from '../constants';
 import { defaultTimes, resultUrl } from '../utils/plan';
-import { ArrowRight, CalendarClock, CalendarRange, CloudSun, Coins, Repeat, Sun, UtensilsCrossed } from 'lucide-react';
-import type { LucideIcon } from 'lucide-react';
+import { ArrowRight, CalendarRange, Sun } from 'lucide-react';
 import DataCounter from '../components/DataCounter';
 import PlaceImage from '../components/PlaceImage';
 
@@ -15,22 +14,6 @@ const bgImages = [
     '/images/main/1.png',
     '/images/main/2.png',
     '/images/main/3.png'
-];
-
-// Co plánovač skutečně hlídá (funkce backendu)
-const FEATURES: [LucideIcon, string][] = [
-    [CalendarClock, 'Otevírací dobu – když je zavřeno, počkáme'],
-    [Sun, 'Sezónu koupališť, lanových center a rozhleden'],
-    [CloudSun, 'Hodinovou předpověď počasí u každé zastávky'],
-    [UtensilsCrossed, 'Oběd mezi 11:30 a 14:00'],
-    [Coins, 'Rozpočet a vstupné'],
-    [Repeat, 'Čas na návrat zpět do startu'],
-];
-
-const STEPS: [string, string][] = [
-    ['Řekni, kdy a jak', 'Jeden den, nebo celá dovolená? Datum, kolik máš času, odkud vyrážíš a jestli pojedeš autem, na kole, nebo půjdeš pěšky.'],
-    ['Vyber, co tě baví', 'Památky, příroda, zábava pro děti, jídlo – a k tomu rozpočet nebo náročnost.'],
-    ['Dostaneš hotový plán', 'Časový harmonogram, mapa trasy, počasí a navigace do Google Maps, Mapy.cz nebo Apple Map. Plán můžeš sdílet nebo uložit do kalendáře.'],
 ];
 
 // Náhodný výběr míst s fotkou pro "Věděli jste?"

@@ -1,3 +1,5 @@
+import { CalendarClock, CloudSun, Coins, Repeat, Sun, UtensilsCrossed } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import type { Category, PlanRequest } from './types/api';
 
 export const CATEGORY_LABELS: Record<Category, string> = {
@@ -106,4 +108,20 @@ export const THEMES: Theme[] = [
         photoPlace: 'Zpívající fontána',
         request: { transport_mode: 'BIKE', route_type: 'LOOP', interests: ['SIGHTSEEING', 'PARK', 'GASTRO'], difficulty: 'MEDIUM', willing_to_pay_entry: true },
     },
+];
+
+// Co plánovač skutečně hlídá (funkce backendu) - úvodní stránka i boční lišta s nápovědou
+export const FEATURES: [LucideIcon, string][] = [
+    [CalendarClock, 'Otevírací dobu – když je zavřeno, počkáme'],
+    [Sun, 'Sezónu koupališť, lanových center a rozhleden'],
+    [CloudSun, 'Hodinovou předpověď počasí u každé zastávky'],
+    [UtensilsCrossed, 'Oběd mezi 11:30 a 14:00'],
+    [Coins, 'Rozpočet a vstupné'],
+    [Repeat, 'Čas na návrat zpět do startu'],
+];
+
+export const STEPS: [string, string][] = [
+    ['Řekni, kdy a jak', 'Jeden den, nebo celá dovolená? Datum, kolik máš času, odkud vyrážíš a jestli pojedeš autem, na kole, nebo půjdeš pěšky.'],
+    ['Vyber, co tě baví', 'Památky, příroda, zábava pro děti, jídlo – a k tomu rozpočet nebo náročnost.'],
+    ['Dostaneš hotový plán', 'Časový harmonogram, mapa trasy, počasí a navigace do Google Maps, Mapy.cz nebo Apple Map. Plán můžeš sdílet nebo uložit do kalendáře.'],
 ];
