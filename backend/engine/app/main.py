@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from typing import List, Literal, Optional
 import math
 from datetime import datetime, timedelta
+from types import SimpleNamespace
 from zoneinfo import ZoneInfo
 import urllib.request
 import json
@@ -34,7 +35,10 @@ def poi_type(poi) -> str:
     return (poi.tags or "").split(",")[0].strip().upper() or poi.category
 
 class PlanRequest(BaseModel):
-    location_id: int
+    location_id: Optional[int] = None  # výchozí obec, nebo start_lat/start_lng (aktuální poloha uživatele)
+    start_lat: Optional[float] = None
+    start_lng: Optional[float] = None
+    start_name: Optional[str] = None
     time_from: str # formát "YYYY-MM-DD HH:MM:SS" (co je teď)
     time_to: str   # formát "YYYY-MM-DD HH:MM:SS" (do kdy má čas)
     transport_mode: Literal["WALK", "BIKE", "CAR"]
@@ -187,9 +191,13 @@ def generate_plan(req: PlanRequest, db: Session = Depends(get_db)):
     if total_mins <= 0:
         raise HTTPException(status_code=400, detail="Čas 'do' musí být větší než čas 'od'.")
 
-    loc = db.query(Location).filter(Location.id == req.location_id).first()
-    if not loc:
-        raise HTTPException(status_code=404, detail="Lokace nenalezena.")
+    # Start: aktuální poloha uživatele, nebo vybraná obec
+    if req.start_lat is not None and req.start_lng is not None:
+        loc = SimpleNamespace(id=None, name=req.start_name or "Vaše poloha", lat=req.start_lat, lng=req.start_lng)
+    else:
+        loc = db.query(Location).filter(Location.id == req.location_id).first() if req.location_id else None
+        if not loc:
+            raise HTTPException(status_code=404, detail="Lokace nenalezena.")
 
     # Filtrujeme aktivity podle vybraných preferencí a dosahu podle způsobu dopravy
     # (pěšky jen centrum, autem i hrady a rozhledny v okolí)
@@ -456,6 +464,9 @@ def generate_plan(req: PlanRequest, db: Session = Depends(get_db)):
     if not any(i["type"] == "poi" for i in itinerary):
         if not pois and out_of_season:
             empty_reason = f"Místa pro zvolené preference v okolí {loc.name} mají v tomto měsíci zavřeno (mimo sezónu)."
+        elif not pois and loc.id is None:
+            empty_reason = ("V dosahu vaší polohy nemáme žádná místa pro zvolené preference. KrušnoPlán plánuje výlety "
+                            "po Karlovarském kraji - zkuste jiné kategorie, auto, nebo vyberte výchozí obec.")
         elif not pois:
             empty_reason = f"V lokaci {loc.name} zatím nemáme žádná místa pro zvolené preference. Zkuste vybrat jiné kategorie (např. Památky)."
         elif skip_reasons:

@@ -44,11 +44,15 @@ export function normalizeTimes<T extends { date: string; time_from: string; time
 }
 
 // Plán je celý v URL (?plan=...) -> odkaz jde sdílet a funguje i po obnovení stránky
-export const encodePlan = (req: PlanRequest) => btoa(JSON.stringify(req)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+// btoa umí jen Latin-1 -> JSON nejdřív převedeme na UTF-8 bajty (název startu "Vaše poloha" má diakritiku)
+const toBase64 = (text: string) => btoa(String.fromCharCode(...new TextEncoder().encode(text)));
+const fromBase64 = (b64: string) => new TextDecoder().decode(Uint8Array.from(atob(b64), c => c.charCodeAt(0)));
+
+export const encodePlan = (req: PlanRequest) => toBase64(JSON.stringify(req)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 
 export function decodePlan(encoded: string): PlanRequest | null {
     try {
-        return JSON.parse(atob(encoded.replace(/-/g, '+').replace(/_/g, '/')));
+        return JSON.parse(fromBase64(encoded.replace(/-/g, '+').replace(/_/g, '/')));
     } catch {
         return null;
     }

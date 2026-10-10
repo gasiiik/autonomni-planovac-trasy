@@ -2,7 +2,10 @@
 export type Category = 'SIGHTSEEING' | 'PARK' | 'FUN' | 'GASTRO' | 'RUNNING' | 'FESTIVAL';
 
 export interface PlanRequest {
-    location_id: number;
+    location_id?: number | null;   // výchozí obec, nebo start_lat/start_lng (aktuální poloha)
+    start_lat?: number | null;
+    start_lng?: number | null;
+    start_name?: string | null;
     time_from: string; // "YYYY-MM-DD HH:MM:SS"
     time_to: string;
     transport_mode: 'WALK' | 'BIKE' | 'CAR';

@@ -3,9 +3,10 @@ import type { ChangeEvent, FormEvent } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import type { Category, Location, PlanRequest } from '../types/api';
 import { fetchLocations } from '../services/apiClient';
-import { Check } from 'lucide-react';
+import { Check, LocateFixed } from 'lucide-react';
 import { DIFFICULTY_LABELS, TRANSPORT_LABELS } from '../constants';
 import { CategoryBadge, TransportIcon } from '../components/Icons';
+import LocationPicker from '../components/LocationPicker';
 import { defaultTimes, localDate, normalizeTimes, nowRounded, resultUrl } from '../utils/plan';
 
 const STEPS = 6;
@@ -26,8 +27,19 @@ const FOOD_PREFERENCES = [
 
 const inputClass = 'w-full border border-gray-300 rounded-xl p-3 focus:outline-none focus:ring-2 focus:ring-primary';
 
+// Poloha uživatele (start "odsud") - obec se pak nevybírá
+interface StartPosition { lat: number; lng: number; name: string }
+
+const distanceKm = (a: { lat: number; lng: number }, b: { lat: number; lng: number }) => {
+    const toRad = (x: number) => x * Math.PI / 180;
+    const h = Math.sin(toRad(b.lat - a.lat) / 2) ** 2
+        + Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(toRad(b.lng - a.lng) / 2) ** 2;
+    return 12742 * Math.asin(Math.sqrt(h));
+};
+
 interface WizardForm {
     location_id: string;
+    start?: StartPosition | null;
     date: string;
     time_from: string;
     time_to: string;
@@ -53,7 +65,7 @@ function initialForm(presetLocation: string | null): WizardForm {
             // Staré zadání (jiný den nebo čas, který už proběhl) -> aktuální časy
             const fresh = form.date < localDate(new Date()) ? { ...form, ...defaultTimes() } : normalizeTimes(form);
             // "Naplánovat výlet odsud" z detailu místa má přednost před posledním zadáním
-            return presetLocation ? { ...fresh, location_id: presetLocation } : fresh;
+            return presetLocation ? { ...fresh, location_id: presetLocation, start: null } : fresh;
         }
     } catch {
         // poškozená data v session storage ignorujeme
@@ -72,6 +84,7 @@ function initialForm(presetLocation: string | null): WizardForm {
         difficulty: 'MEDIUM',
         has_children: false,
         indoor_when_rain: false,
+        start: null,
     };
 }
 
@@ -79,7 +92,9 @@ function toPlanRequest(f: WizardForm): PlanRequest {
     const interests = f.interests.length > 0 ? [...f.interests] : [...ALL_INTERESTS];
     if (f.gastro) interests.push('GASTRO');
     return {
-        location_id: parseInt(f.location_id),
+        ...(f.start
+            ? { start_lat: f.start.lat, start_lng: f.start.lng, start_name: f.start.name }
+            : { location_id: parseInt(f.location_id) }),
         time_from: `${f.date} ${f.time_from}:00`,
         time_to: `${f.date} ${f.time_to}:00`,
         transport_mode: f.transport_mode,
@@ -103,6 +118,29 @@ export default function Wizard() {
     const [locationsError, setLocationsError] = useState('');
     const [stepError, setStepError] = useState('');
     const [formData, setFormData] = useState<WizardForm>(() => initialForm(searchParams.get('location')));
+    const [locating, setLocating] = useState(false);
+
+    // "Vyrazit z mé polohy" - poloha z prohlížeče, název podle nejbližší obce
+    const useMyLocation = () => {
+        setStepError('');
+        if (!navigator.geolocation) return setStepError('Prohlížeč neumí zjistit polohu – vyber prosím obec.');
+        setLocating(true);
+        navigator.geolocation.getCurrentPosition(pos => {
+            setLocating(false);
+            const here = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+            const nearest = [...locations].sort((a, b) => distanceKm(here, a) - distanceKm(here, b))[0];
+            if (nearest && distanceKm(here, nearest) > 40) {
+                return setStepError('Jsi mimo Karlovarský kraj – KrušnoPlán plánuje výlety po kraji. Vyber prosím výchozí obec.');
+            }
+            const name = nearest ? `Vaše poloha (u obce ${nearest.name})` : 'Vaše poloha';
+            setFormData(prev => ({ ...prev, start: { ...here, name }, location_id: '' }));
+        }, err => {
+            setLocating(false);
+            setStepError(err.code === err.PERMISSION_DENIED
+                ? 'Přístup k poloze je zakázaný – povol ho v prohlížeči, nebo vyber obec.'
+                : 'Polohu se nepodařilo zjistit – vyber prosím obec.');
+        }, { enableHighAccuracy: true, timeout: 10000 });
+    };
 
     useEffect(() => {
         fetchLocations()
@@ -136,7 +174,7 @@ export default function Wizard() {
             const start = new Date(`${formData.date}T${formData.time_from}`);
             if (start < new Date()) return 'Tento čas už proběhl – vyber pozdější čas nebo jiný den.';
         }
-        if (step === 2 && !formData.location_id) return 'Vyber výchozí místo.';
+        if (step === 2 && !formData.location_id && !formData.start) return 'Vyber výchozí obec, nebo použij svou polohu.';
         return '';
     };
 
@@ -160,7 +198,7 @@ export default function Wizard() {
         else nextStep();
     };
 
-    const locationName = locations.find(l => String(l.id) === formData.location_id)?.name;
+    const locationName = formData.start?.name ?? locations.find(l => String(l.id) === formData.location_id)?.name;
 
     return (
         <div className="container mx-auto pt-28 pb-12 px-4 max-w-3xl">
@@ -205,12 +243,21 @@ export default function Wizard() {
                                 {locationsError ? (
                                     <p className="bg-red-100 text-red-700 p-3 rounded-xl">{locationsError}</p>
                                 ) : (
-                                    <select name="location_id" value={formData.location_id} onChange={handleChange} className={inputClass} required>
-                                        <option value="" disabled>{locations.length ? 'Vyberte místo...' : 'Načítám místa...'}</option>
-                                        {locations.map(loc => (
-                                            <option key={loc.id} value={loc.id}>{loc.name}</option>
-                                        ))}
-                                    </select>
+                                    <LocationPicker
+                                        locations={locations}
+                                        value={formData.location_id}
+                                        startName={formData.start?.name}
+                                        locating={locating}
+                                        onSelect={id => { setStepError(''); setFormData(prev => ({ ...prev, location_id: id, start: null })); }}
+                                        onUseMyLocation={useMyLocation}
+                                        onClearStart={() => setFormData(prev => ({ ...prev, start: null }))}
+                                    />
+                                )}
+                                {!formData.start && !locationsError && (
+                                    <button type="button" onClick={useMyLocation} disabled={locating || !locations.length}
+                                        className="mt-3 inline-flex items-center gap-2 px-4 py-2 rounded-full border-2 border-primary text-primary font-semibold hover:bg-primary hover:text-white transition disabled:opacity-60">
+                                        <LocateFixed size={18} aria-hidden="true" /> {locating ? 'Zjišťuji polohu…' : 'Vyrazit z mé polohy'}
+                                    </button>
                                 )}
                             </div>
                             <div>
