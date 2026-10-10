@@ -2,6 +2,8 @@
 
 Naplánuj to z otevřených dat Karlovarského kraje sestaví výlet nebo celou dovolenou na míru. Uživatel zadá, kolik má času, odkud vyráží, čím se přepravuje a co ho baví, a dostane hotový harmonogram: zastávky v pořadí, časy přesunů, mapu, navigaci, počasí a u dovolené i ubytování. Plánovač přitom hlídá otevírací dobu, sezónu, vstupné, rozpočet, děti i déšť.
 
+<img width="1840" height="845" alt="image" src="https://github.com/user-attachments/assets/093f6b16-5ef3-4b31-85cd-aa2243841b6f" />
+
 ## Problém → uživatel → data → funkce → přínos
 
 | | |
