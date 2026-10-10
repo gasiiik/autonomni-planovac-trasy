@@ -18,10 +18,15 @@ export default function Layout() {
         e.preventDefault();
         const scroll = (tries = 0) => {
             const el = document.getElementById('jak-to-funguje');
-            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            // Obsah sekce (nadpis a karty kroků) zarovnáme kousek pod horní okraj okna
+            const content = el?.firstElementChild;
+            if (content) window.scrollTo({ top: content.getBoundingClientRect().top + window.scrollY - 56, behavior: 'smooth' });
             else if (tries < 40) setTimeout(() => scroll(tries + 1), 50);   // úvodní stránka se ještě vykresluje
         };
-        if (pathname !== '/') navigate('/');
+        if (pathname !== '/') {
+            navigate('/');
+            setTimeout(() => scroll(40), 800);   // dorovnání, kdyby se nad sekcí ještě donačetly fotky
+        }
         scroll();
     };
 
