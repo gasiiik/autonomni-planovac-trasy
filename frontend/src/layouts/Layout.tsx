@@ -77,8 +77,10 @@ export default function Layout() {
                 </div>
             </header>
 
-            {/* Plovoucí otazník vlevo nahoře */}
-            <a href="/#jak-to-funguje" onClick={showHowItWorks} className="print:hidden fixed top-6 left-4 md:left-6 z-50 bg-primary text-white w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center shadow-lg hover:bg-primary-dark hover:scale-110 transition-all font-bold text-xl" title="Jak to funguje">
+            {/* Plovoucí otazník vlevo nahoře - při otevřené liště je nad ní a dalším kliknutím ji zavře */}
+            <a href="/#jak-to-funguje" onClick={showHowItWorks} aria-expanded={helpOpen}
+                className={`print:hidden fixed top-6 left-4 md:left-6 w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center shadow-lg hover:scale-110 transition-all font-bold text-xl ${helpOpen ? 'z-[70] bg-accent text-primary-dark ring-4 ring-white' : 'z-50 bg-primary text-white hover:bg-primary-dark'}`}
+                title={helpOpen ? 'Zavřít nápovědu' : 'Jak to funguje'}>
                 ?
             </a>
 
