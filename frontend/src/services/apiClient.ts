@@ -32,6 +32,25 @@ export const searchAddress = async (q: string, near?: { lat: number; lng: number
     return await res.json();
 }
 
+// Trasa po skutečných cestách (OSRM / Valhalla přes náš server - cache a hlídání limitů); [lat, lng][] nebo null
+export const fetchRoute = async (points: { lat: number; lng: number }[], mode: string, wheelchair: boolean, signal?: AbortSignal): Promise<[number, number][] | null> => {
+    const coords = points.map(p => `${p.lng.toFixed(5)},${p.lat.toFixed(5)}`).join(';');
+    const res = await fetch(`${API_URL}/route?coords=${coords}&mode=${mode}&wheelchair=${wheelchair}`, { signal });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.line?.length ? data.line : null;
+}
+
+// Adresa podle souřadnic (null, když ji nejde zjistit)
+export const reverseAddress = async (lat: number, lng: number): Promise<string | null> => {
+    try {
+        const res = await fetch(`${API_URL}/reverse?lat=${lat}&lng=${lng}`);
+        return res.ok ? (await res.json()).name ?? null : null;
+    } catch {
+        return null;
+    }
+}
+
 export const fetchDatasets = async (): Promise<DatasetsResponse> => {
     const res = await fetch(`${API_URL}/datasets`);
     if (!res.ok) throw await readError(res, 'Nepodařilo se načíst přehled dat');

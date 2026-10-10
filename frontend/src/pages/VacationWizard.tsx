@@ -281,7 +281,7 @@ export default function VacationWizard() {
 
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <NumberField label="Počet osob" unit="os." name="participants" min="1" max="50" step="1" value={form.participants} onChange={e => update({ participants: e.target.value })} />
-                                <NumberField label="Rozpočet za den, všichni" unit="Kč" name="budget_max" min="0" step="50" placeholder="bez omezení" value={form.budget_max} onChange={e => update({ budget_max: e.target.value })} />
+                                <NumberField label="Max. vstupné za den, všichni" unit="Kč" name="budget_max" min="0" step="50" placeholder="bez omezení" value={form.budget_max} onChange={e => update({ budget_max: e.target.value })} />
                             </div>
 
                             <fieldset>

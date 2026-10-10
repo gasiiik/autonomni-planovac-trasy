@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import L from 'leaflet';
 import { DAY_COLORS } from '../constants';
+import { fetchRoute } from '../services/apiClient';
 import 'leaflet/dist/leaflet.css';
 import type { Waypoint } from '../types/api';
 
@@ -24,59 +25,17 @@ const FLAG_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" st
 
 const escapeHtml = (s: string) => s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 
-// Trasa po skutečných cestách: OSRM nad OpenStreetMap (FOSSGIS) - auto, kolo i pěšky
-const ROUTING_PROFILE: Record<string, string> = { CAR: 'routed-car', BIKE: 'routed-bike', WALK: 'routed-foot' };
-
-// Bezbariérová chůze (kočárek, vozík): Valhalla s profilem "wheelchair" - vyhýbá se schodům a prudkým stoupáním
-function decodePolyline6(str: string): L.LatLng[] {
-    const out: L.LatLng[] = [];
-    let i = 0, lat = 0, lng = 0;
-    while (i < str.length) {
-        for (const axis of [0, 1]) {
-            let shift = 0, result = 0, byte: number;
-            do { byte = str.charCodeAt(i++) - 63; result |= (byte & 0x1f) << shift; shift += 5; } while (byte >= 0x20);
-            const delta = result & 1 ? ~(result >> 1) : result >> 1;
-            if (axis === 0) lat += delta; else lng += delta;
-        }
-        out.push(L.latLng(lat / 1e6, lng / 1e6));
-    }
-    return out;
-}
-
-async function fetchWheelchairRoute(points: L.LatLng[], signal: AbortSignal): Promise<L.LatLng[] | null> {
-    const body = {
-        locations: points.map(p => ({ lat: p.lat, lon: p.lng })),
-        costing: 'pedestrian',
-        costing_options: { pedestrian: { type: 'wheelchair', step_penalty: 1000, use_hills: 0.1, max_grade: 6 } },
-    };
-    const res = await fetch('https://valhalla1.openstreetmap.de/route', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal,
-    });
-    if (!res.ok) return null;
-    const data = await res.json();
-    const legs: { shape: string }[] = data.trip?.legs ?? [];
-    return legs.length ? legs.flatMap(l => decodePolyline6(l.shape)) : null;
-}
-
-async function fetchOsrmRoute(points: L.LatLng[], transport: string, signal: AbortSignal): Promise<L.LatLng[] | null> {
-    const profile = ROUTING_PROFILE[transport] ?? 'routed-car';
-    const coords = points.map(p => `${p.lng.toFixed(5)},${p.lat.toFixed(5)}`).join(';');
-    const res = await fetch(`https://routing.openstreetmap.de/${profile}/route/v1/driving/${coords}?overview=full&geometries=geojson`, { signal });
-    if (!res.ok) return null;
-    const data = await res.json();
-    const line: [number, number][] | undefined = data.routes?.[0]?.geometry?.coordinates;
-    return data.code === 'Ok' && line?.length ? line.map(([lng, lat]) => L.latLng(lat, lng)) : null;
-}
-
 // Trasa se hledá po úsecích (zastávka -> zastávka): když se jeden úsek nepodaří (např. bod mimo cesty), nahradí ho jen
 // vzdušná čára a zbytek trasy - včetně návratu do výchozího bodu - zůstane po cestách
-async function fetchRoadRoute(points: L.LatLng[], transport: string, wheelchair: boolean, signal: AbortSignal): Promise<{ line: L.LatLng[]; failed: number } | null> {
+async function fetchRoadRoute(points: L.LatLng[], transport: string, wheelchair: boolean, signal: AbortSignal, wholeOnly = false): Promise<{ line: L.LatLng[]; failed: number } | null> {
     if (points.length < 2) return null;
-    const route = (pair: L.LatLng[]) => (wheelchair ? fetchWheelchairRoute(pair, signal) : fetchOsrmRoute(pair, transport, signal))
+    const route = (pair: L.LatLng[]) => fetchRoute(pair, transport, wheelchair, signal)
+        .then(line => line?.map(([lat, lng]) => L.latLng(lat, lng)) ?? null)
         .catch(err => { if (signal.aborted) throw err; return null; });
     // Nejdřív celá trasa jedním dotazem (rychlé, šetří veřejné služby); až když selže, po úsecích
     const whole = await route(points);
     if (whole) return { line: whole, failed: 0 };
+    if (wholeOnly) return null;   // ostatní dny: bez úsekového dohledávání (zbytečně moc dotazů)
     const segments: (L.LatLng[] | null)[] = [];
     for (let i = 1; i < points.length; i++) segments.push(await route([points[i - 1], points[i]]));
     const failed = segments.filter(seg => !seg).length;
@@ -112,6 +71,8 @@ export default function RouteMap({ waypoints, transport = 'CAR', wheelchair = fa
             attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
         }).addTo(map);
 
+        const controller = new AbortController();
+        let otherRoutes: Promise<void> = Promise.resolve();
         const points = waypoints.map(w => L.latLng(w.lat, w.lng));
         // Ostatní dny dovolené: tenčí barevná trasa a body (klik otevře daný den)
         const everything: L.LatLng[] = [...points];
@@ -119,8 +80,18 @@ export default function RouteMap({ waypoints, transport = 'CAR', wheelchair = fa
             const color = DAY_COLORS[day % DAY_COLORS.length];
             const pts = wps.map(w => L.latLng(w.lat, w.lng));
             everything.push(...pts);
-            L.polyline(pts, { color, weight: 3, opacity: 0.55 }).bindTooltip(`Den ${day + 1}`, { sticky: true })
+            const dayLine = L.polyline(pts, { color, weight: 3, opacity: 0.55, dashArray: '4 6' }).bindTooltip(`Den ${day + 1}`, { sticky: true })
                 .on('click', () => onDayRef.current?.(day)).addTo(map);
+            // Vzdušná čára se po načtení nahradí trasou po skutečných cestách (dny se načítají postupně, šetříme službu)
+            otherRoutes = otherRoutes.then(async () => {
+                if (controller.signal.aborted) return;
+                try {
+                    const road = await fetchRoadRoute(pts, transport, wheelchair && transport === 'WALK', controller.signal, true);
+                    if (!road || controller.signal.aborted) return;
+                    dayLine.setLatLngs(road.line);
+                    dayLine.setStyle({ weight: 4, opacity: 0.7, dashArray: undefined });
+                } catch { /* služba nedostupná - zůstane vzdušná čára */ }
+            });
             wps.filter(w => w.type === 'POI').forEach(w => {
                 L.circleMarker([w.lat, w.lng], { radius: 5, color: '#fff', weight: 2, fillColor: color, fillOpacity: 0.9 })
                     .bindTooltip(`Den ${day + 1}: ${escapeHtml(w.name)}`)
@@ -129,7 +100,6 @@ export default function RouteMap({ waypoints, transport = 'CAR', wheelchair = fa
         });
         // Nejdřív vzdušnou čarou (hned), po načtení ji nahradí trasa po skutečných cestách
         const straight = L.polyline(points, { color: '#087F78', weight: 3, opacity: 0.6, dashArray: '6 8' }).addTo(map);
-        const controller = new AbortController();
         fetchRoadRoute(points, transport, wheelchair && transport === 'WALK', controller.signal)
             .then(road => {
                 if (!road) return;

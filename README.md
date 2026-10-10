@@ -1,6 +1,6 @@
-# KrušnoPlán – plánovač výletů a dovolené po Karlovarském kraji
+# Naplánuj to – plánovač výletů a dovolené po Karlovarském kraji
 
-KrušnoPlán z otevřených dat Karlovarského kraje sestaví výlet nebo celou dovolenou na míru. Uživatel zadá, kolik má času, odkud vyráží, čím se přepravuje a co ho baví, a dostane hotový harmonogram: zastávky v pořadí, časy přesunů, mapu, navigaci, počasí a u dovolené i ubytování. Plánovač přitom hlídá otevírací dobu, sezónu, vstupné, rozpočet, děti i déšť.
+Naplánuj to z otevřených dat Karlovarského kraje sestaví výlet nebo celou dovolenou na míru. Uživatel zadá, kolik má času, odkud vyráží, čím se přepravuje a co ho baví, a dostane hotový harmonogram: zastávky v pořadí, časy přesunů, mapu, navigaci, počasí a u dovolené i ubytování. Plánovač přitom hlídá otevírací dobu, sezónu, vstupné, rozpočet, děti i déšť.
 
 ## Problém → uživatel → data → funkce → přínos
 

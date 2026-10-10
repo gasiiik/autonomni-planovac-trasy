@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { Search } from 'lucide-react';
-import { searchAddress } from '../services/apiClient';
+import { LocateFixed, Search } from 'lucide-react';
+import { reverseAddress, searchAddress } from '../services/apiClient';
 import type { AddressResult } from '../services/apiClient';
 
 // Výchozí místo zadané adresou: návrhy se hledají samy během psaní (po krátké pauze, Nominatim
@@ -10,6 +10,7 @@ export default function AddressSearch({ onPick }: { onPick: (a: AddressResult) =
     const [results, setResults] = useState<AddressResult[] | null>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
+    const [locating, setLocating] = useState(false);
     const near = useRef<{ lat: number; lng: number } | null>(null);   // poloha uživatele (jen když ji už povolil)
     const latest = useRef(0);   // zahazuje opožděné odpovědi na starší dotaz
 
@@ -48,14 +49,41 @@ export default function AddressSearch({ onPick }: { onPick: (a: AddressResult) =
         return () => clearTimeout(timer);
     }, [query]);
 
+    // Přesná poloha z prohlížeče (GPS / Wi-Fi); adresu k ní dohledáme, když se nepovede, jde o "Moje poloha"
+    const useMyLocation = () => {
+        setError('');
+        if (!navigator.geolocation) return setError('Prohlížeč neumí zjistit polohu – zadej adresu.');
+        setLocating(true);
+        navigator.geolocation.getCurrentPosition(async pos => {
+            const { latitude: lat, longitude: lng, accuracy } = pos.coords;
+            const address = await reverseAddress(lat, lng);
+            setLocating(false);
+            setResults(null); setQuery('');
+            onPick({ name: address ? `Moje poloha (${address})` : 'Moje poloha', lat, lng });
+            if (accuracy > 500) setError(`Poloha je jen přibližná (±${Math.round(accuracy)} m) – zkontroluj ji, nebo zadej adresu.`);
+        }, err => {
+            setLocating(false);
+            setError(err.code === err.PERMISSION_DENIED
+                ? 'Přístup k poloze je zakázaný – povol ho v prohlížeči, nebo zadej adresu.'
+                : 'Polohu se nepodařilo zjistit – zadej adresu.');
+        }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 });
+    };
+
     return (
         <div>
-            <div className="relative">
-                <Search size={18} aria-hidden="true" className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                <input type="text" value={query} onChange={e => setQuery(e.target.value)} autoComplete="off"
-                    placeholder="Začni psát adresu, např. T. G. Masaryka 1, Cheb"
-                    aria-label="Adresa výchozího místa"
-                    className="w-full border border-gray-300 rounded-xl p-3 pl-10 focus:outline-none focus:ring-2 focus:ring-primary" />
+            <div className="flex items-stretch gap-2">
+                <div className="relative flex-1 min-w-0">
+                    <Search size={18} aria-hidden="true" className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                    <input type="text" value={query} onChange={e => setQuery(e.target.value)} autoComplete="off"
+                        placeholder="Začni psát adresu, např. T. G. Masaryka 1, Cheb"
+                        aria-label="Adresa výchozího místa"
+                        className="w-full border border-gray-300 rounded-xl p-3 pl-10 focus:outline-none focus:ring-2 focus:ring-primary" />
+                </div>
+                <button type="button" onClick={useMyLocation} disabled={locating} title="Použít mou přesnou polohu" aria-label="Použít mou přesnou polohu"
+                    className="shrink-0 inline-flex items-center gap-2 px-4 rounded-xl border-2 border-primary text-primary font-semibold shadow-sm transition hover:bg-primary hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:opacity-60">
+                    <LocateFixed size={20} aria-hidden="true" className={locating ? 'animate-pulse' : ''} />
+                    <span className="hidden sm:inline">{locating ? 'Zjišťuji…' : 'Moje poloha'}</span>
+                </button>
             </div>
             {loading && <p className="text-sm text-gray-500 mt-2">Hledám…</p>}
             {error && <p className="text-sm text-red-700 mt-2">{error}</p>}

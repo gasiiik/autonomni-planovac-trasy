@@ -35,7 +35,7 @@ export default function HelpDrawer({ open, onClose }: { open: boolean; onClose: 
                     <div>
                         <h2 className="text-2xl font-bold text-primary-dark leading-tight mb-3">Celý den naplánovaný za pár vteřin</h2>
                         <p className="text-gray-700 leading-relaxed mb-6">
-                            Nemusíš procházet desítky webů a hlídat, co má kdy otevřeno. KrušnoPlán vezme místa z otevřených dat
+                            Nemusíš procházet desítky webů a hlídat, co má kdy otevřeno. Naplánuj to vezme místa z otevřených dat
                             Karlovarského kraje a poskládá z nich trasu, která se ti vejde do dne.
                         </p>
                         <p className="font-semibold text-primary-dark mb-3">Na co myslíme za tebe</p>

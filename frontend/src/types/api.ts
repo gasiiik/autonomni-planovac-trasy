@@ -18,6 +18,7 @@ export interface PlanRequest {
     difficulty?: 'EASY' | 'MEDIUM' | 'HARD';
     participants_count?: number;
     has_children?: boolean;
+    allow_past?: boolean;            // uložený proběhlý výlet: zobrazit bez kontroly na minulost
     buffer_mins?: number | null;     // rezerva po přesunu (výchozí podle dopravy)
     wheelchair_accessible?: boolean; // pěšky bezbariérově (kočárek, vozík)
     indoor_when_rain?: boolean;

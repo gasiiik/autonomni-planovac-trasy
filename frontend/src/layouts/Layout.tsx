@@ -57,8 +57,9 @@ export default function Layout() {
                 <div className="container mx-auto flex justify-center">
                     <div className="bg-primary/80 backdrop-blur-md border border-white/20 shadow-lg rounded-full pl-3 pr-2 sm:px-6 py-2 flex items-center justify-between w-full max-w-4xl xl:max-w-5xl gap-4">
                         <Link to="/" className="flex items-center gap-2 font-bold tracking-wide text-xl text-white hover:text-accent transition-colors shrink-0">
-                            <img src="/images/logo.png" alt="KrušnoPlán" className="h-8 w-auto rounded-md" />
-                            <span className="hidden sm:inline">KrušnoPlán</span>
+                            <img src="/images/logo.png" alt="Naplánuj to" className="h-12 w-auto -my-1"
+                                style={{ filter: 'drop-shadow(1.5px 0 0 #fff) drop-shadow(-1.5px 0 0 #fff) drop-shadow(0 1.5px 0 #fff) drop-shadow(0 -1.5px 0 #fff) drop-shadow(0 3px 5px rgba(0,0,0,0.45))' }} />
+                            <span className="hidden sm:inline [text-shadow:0_2px_4px_rgba(0,0,0,0.45)]">Naplánuj to</span>
                         </Link>
                         
                         <nav className="flex items-center gap-3 lg:gap-5 font-medium text-sm text-white whitespace-nowrap">
@@ -109,7 +110,7 @@ export default function Layout() {
                     Počasí: Open-Meteo · Fotky: Wikipedie a Wikimedia Commons · Mapa: © přispěvatelé OpenStreetMap
                 </p>
                 <p className="text-xs text-white/70">
-                    &copy; {new Date().getFullYear()} KrušnoPlán · Prototyp z Hackathonu otevřených dat Karlovarského kraje 2026. Není oficiální službou Karlovarského kraje ani KIC KK.
+                    &copy; {new Date().getFullYear()} Naplánuj to · Prototyp z Hackathonu otevřených dat Karlovarského kraje 2026. Není oficiální službou Karlovarského kraje ani KIC KK.
                 </p>
             </footer>
         </div>

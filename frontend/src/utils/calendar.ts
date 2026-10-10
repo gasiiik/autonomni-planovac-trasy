@@ -9,7 +9,7 @@ function dayEvents(plan: PlanResponse, date: string, stamp: string) {
         .filter(i => i.type === 'poi')
         .map((i, idx) => [
             'BEGIN:VEVENT',
-            `UID:krusnoplan-${day}-${idx}-${i.poi_id ?? idx}@krusnoplan`,
+            `UID:naplanujto-${day}-${idx}-${i.poi_id ?? idx}@naplanujto`,
             `DTSTAMP:${stamp}`,
             `DTSTART;TZID=Europe/Prague:${day}T${i.start.replace(':', '')}00`,
             `DTEND;TZID=Europe/Prague:${day}T${i.end.replace(':', '')}00`,
@@ -22,7 +22,7 @@ function dayEvents(plan: PlanResponse, date: string, stamp: string) {
 }
 
 function saveIcs(name: string, events: string[], fileName: string) {
-    const ics = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//KrusnoPlan//Planovac vyletu//CS', 'CALSCALE:GREGORIAN',
+    const ics = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//NaplanujTo//Planovac vyletu//CS', 'CALSCALE:GREGORIAN',
         `X-WR-CALNAME:${escapeIcs(name)}`, ...events, 'END:VCALENDAR'].join('\r\n');
     const url = URL.createObjectURL(new Blob([ics], { type: 'text/calendar;charset=utf-8' }));
     const a = document.createElement('a');

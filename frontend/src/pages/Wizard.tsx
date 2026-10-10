@@ -121,9 +121,9 @@ export default function Wizard() {
         setStepError('');
         const nearest = [...locations].sort((x, y) => distanceKm(a, x) - distanceKm(a, y))[0];
         if (nearest && distanceKm(a, nearest) > 40) {
-            return setStepError('Tahle adresa je mimo Karlovarský kraj – KrušnoPlán plánuje výlety po kraji.');
+            return setStepError('Tahle adresa je mimo Karlovarský kraj – aplikace plánuje výlety jen po kraji.');
         }
-        const short = a.name.split(', ').slice(0, 3).join(', ');
+        const short = a.name.startsWith('Moje poloha') ? a.name : a.name.split(', ').slice(0, 3).join(', ');
         setFormData(prev => ({ ...prev, start: { lat: a.lat, lng: a.lng, name: short }, location_id: '' }));
     };
 
@@ -331,7 +331,7 @@ export default function Wizard() {
 
                             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                                 <NumberField label="Počet osob" unit="os." name="participants" min="1" max="50" step="1" value={formData.participants} onChange={handleChange} />
-                                <NumberField label="Max. útrata celkem" unit="Kč" name="budget_max" min="0" step="50" placeholder="bez omezení" value={formData.budget_max} onChange={handleChange} />
+                                <NumberField label="Max. vstupné celkem" unit="Kč" name="budget_max" min="0" step="50" placeholder="bez omezení" value={formData.budget_max} onChange={handleChange} />
                                 <NumberField label="Max. čas na cestě" unit="min" name="max_travel_time_mins" min="0" step="10" placeholder="bez omezení" value={formData.max_travel_time_mins} onChange={handleChange} />
                             </div>
 
@@ -364,7 +364,7 @@ export default function Wizard() {
                                 <p><strong>Doprava:</strong> {TRANSPORT_LABELS[formData.transport_mode]}{formData.transport_mode === 'WALK' && formData.wheelchair_accessible ? ' (bezbariérově)' : ''}, {formData.route_type === 'LOOP' ? 'okruh' : 'jednosměrně'}</p>
                                 <p><strong>Zájmy:</strong> {formData.interests.length ? INTERESTS.filter(i => formData.interests.includes(i.value)).map(i => i.label).join(', ') : 'Překvap mě'}{formData.gastro ? ' + jídlo' : ''}</p>
                                 <p><strong>Počet osob:</strong> {formData.participants || 1}</p>
-                                <p><strong>Vstupné:</strong> {formData.willing_to_pay_entry ? 'ano' : 'jen zdarma'}{formData.budget_max ? `, max. ${formData.budget_max} Kč` : ''}</p>
+                                <p><strong>Vstupné:</strong> {formData.willing_to_pay_entry ? 'ano' : 'jen zdarma'}{formData.budget_max ? `, max. ${formData.budget_max} Kč celkem` : ''}</p>
                                 <p><strong>Náročnost:</strong> {DIFFICULTY_LABELS[formData.difficulty]}{formData.has_children ? ', s dětmi' : ''}</p>
                             </div>
                         </div>

@@ -25,7 +25,7 @@ for ($attempt = 1; $attempt <= 5 && !$pdo; $attempt++) {
     } catch (PDOException $e) {
         if ($attempt < 5) sleep(1);
         else {
-            error_log('KrušnoPlán: připojení k databázi selhalo: ' . $e->getMessage());
+            error_log('Naplánuj to: připojení k databázi selhalo: ' . $e->getMessage());
             http_response_code(503);
             echo json_encode(["error" => "Database connection failed – databáze ještě startuje nebo neběží. Zkontroluj `docker compose ps` a `docker compose logs db`."]);
             exit();
@@ -76,6 +76,19 @@ if ($request_uri === '/api/geocode' && $method === 'GET') {
     $geo = ['q' => (string)($_GET['q'] ?? '')];
     if (isset($_GET['lat'], $_GET['lng'])) { $geo['lat'] = (float)$_GET['lat']; $geo['lng'] = (float)$_GET['lng']; }
     forward_to_engine('/internal/geocode?' . http_build_query($geo));
+}
+
+// Trasa po cestách (server drží cache a hlídá limity veřejných routovacích služeb)
+if ($request_uri === '/api/route' && $method === 'GET') {
+    forward_to_engine('/internal/route?' . http_build_query([
+        'coords' => (string)($_GET['coords'] ?? ''), 'mode' => (string)($_GET['mode'] ?? 'CAR'),
+        'wheelchair' => !empty($_GET['wheelchair']) && $_GET['wheelchair'] !== 'false' ? 'true' : 'false',
+    ]));
+}
+
+// Adresa podle souřadnic (tlačítko "Moje poloha")
+if ($request_uri === '/api/reverse' && $method === 'GET') {
+    forward_to_engine('/internal/reverse?' . http_build_query(['lat' => (float)($_GET['lat'] ?? 0), 'lng' => (float)($_GET['lng'] ?? 0)]));
 }
 
 if ($request_uri === '/api/locations' && $method === 'GET') {

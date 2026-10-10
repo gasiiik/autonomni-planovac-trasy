@@ -93,8 +93,8 @@ interface StopActions {
 function PoiItem({ item, order, transport, people, actions }: { item: ItineraryItem; order: number; transport: string; people: number; actions: StopActions | null }) {
     const category = item.category;
     const cost = item.estimated_cost && item.estimated_cost > 0
-        ? `${Math.round(item.estimated_cost)} Kč${people > 1 ? ` za ${people} os.` : ''}`
-        : 'Zdarma';
+        ? `Vstupné ${Math.round(item.estimated_cost)} Kč${people > 1 ? ` za ${people} os.` : ''}`
+        : 'Vstupné zdarma';
     return (
         <div>
             <div className="relative">
@@ -246,7 +246,7 @@ function TripPrint({ trip, people }: { trip: Trip; people: number }) {
                                     <li key={k}>
                                         <strong>{it.start}–{it.end}</strong> {it.title}
                                         {it.address ? `, ${it.address}` : ''}
-                                        {it.estimated_cost ? ` · ${Math.round(it.estimated_cost)} Kč` : ''}
+                                        {it.estimated_cost ? ` · vstupné ${Math.round(it.estimated_cost)} Kč` : ''}
                                     </li>
                                 ))}
                             </ol>
@@ -446,6 +446,7 @@ function ResultView() {
                                 <div><p className="text-2xl font-extrabold">{Math.round(trip.days.reduce((n, d) => n + d.plan.itinerary.reduce((k, i) => k + (i.distance_km ?? 0), 0), 0))} km</p><p className="text-sm text-white/80">na cestách</p></div>
                                 <div><p className="text-2xl font-extrabold">{Math.round(trip.days.reduce((n, d) => n + d.plan.total_estimated_cost, 0))} Kč</p><p className="text-sm text-white/80">vstupné celkem{people > 1 ? ` (${people} os.)` : ''}</p></div>
                             </div>
+                            <p className="text-xs text-gray-500 -mt-2 mb-4 print:hidden">Ceny jsou jen vstupné – jídlo, doprava ani ubytování se nepočítají.</p>
                             <div className="flex flex-wrap gap-3 mb-4">
                                 <button onClick={() => downloadTripIcs(trip.days.map(d => ({ plan: d.plan, date: d.date })), trip.stays.map(s => s.town.name).join(', '))} className={ACTION_BTN}>
                                     <CalendarPlus size={18} aria-hidden="true" /> Celá dovolená do kalendáře
@@ -512,8 +513,9 @@ function ResultView() {
                                 <div><p className="text-2xl font-extrabold">{stops.length}</p><p className="text-sm text-white/80">zastávek</p></div>
                                 <div><p className="text-2xl font-extrabold">{Math.round(totalKm)} km</p><p className="text-sm text-white/80">celkem</p></div>
                                 <div><p className="text-2xl font-extrabold">{formatMins(result.total_planned_time - waitMins)}</p><p className="text-sm text-white/80">naplánováno</p></div>
-                                <div><p className="text-2xl font-extrabold">{Math.round(result.total_estimated_cost)} Kč</p><p className="text-sm text-white/80">{people > 1 ? `odhad za ${people} os.` : 'odhad nákladů'}</p></div>
+                                <div><p className="text-2xl font-extrabold">{Math.round(result.total_estimated_cost)} Kč</p><p className="text-sm text-white/80">{people > 1 ? `vstupné celkem za ${people} os.` : 'vstupné celkem'}</p></div>
                             </div>
+                            <p className="text-xs text-gray-500 -mt-2 mb-4 print:hidden">Ceny jsou jen vstupné – jídlo, doprava ani ubytování se nepočítají.</p>
                             {result.remaining_free_time_mins > 0 && (
                                 <p className="text-sm text-gray-500 mb-6" title="Čas, který zbyl do konce zvoleného okna – další místo se do něj už nevešlo">
                                     Rezerva do konce dne: {formatMins(result.remaining_free_time_mins)}

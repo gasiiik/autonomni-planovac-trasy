@@ -10,6 +10,7 @@ from types import SimpleNamespace
 from zoneinfo import ZoneInfo
 import urllib.request
 import urllib.parse
+import urllib.error
 import json
 
 from .database import get_db, SessionLocal
@@ -23,7 +24,7 @@ async def lifespan(app: FastAPI):
     photos.prefetch_all(SessionLocal)  # fotky míst do cache na serveru (na pozadí)
     yield
 
-app = FastAPI(title="KrušnoPlán Python Engine - Pokročilé Trasování", lifespan=lifespan)
+app = FastAPI(title="Naplánuj to Python Engine - Pokročilé Trasování", lifespan=lifespan)
 
 # Kontejner běží v UTC, uživatelé plánují v českém čase
 LOCAL_TZ = ZoneInfo("Europe/Prague")
@@ -105,6 +106,7 @@ class PlanRequest(BaseModel):
     difficulty: Optional[str] = "EASY"
     participants_count: Optional[int] = 1
     has_children: Optional[bool] = False
+    allow_past: Optional[bool] = False   # zobrazení již proběhlého (uloženého) výletu - bez kontroly na minulost
     buffer_mins: Optional[int] = None   # rezerva po každém přesunu (parkování, zorientování); None = výchozí podle dopravy
     wheelchair_accessible: Optional[bool] = False   # pěšky bezbariérově (kočárek, vozík): bez schodů a stoupání, pomalejší tempo
     exclude_ids: Optional[List[int]] = []  # místa navštívená v předchozích dnech dovolené / vyřazená uživatelem
@@ -261,7 +263,7 @@ def get_weather_info(lat: float, lng: float, t_from: datetime, t_to: datetime):
             return weather_status_for(cached[1], t_from, t_to), cached[1]
         url = (f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lng}"
                f"&hourly=weathercode,temperature_2m&timezone=Europe%2FPrague&start_date={day}&end_date={day}")
-        req = urllib.request.Request(url, headers={'User-Agent': 'KrusnoPlan/1.0'})
+        req = urllib.request.Request(url, headers={'User-Agent': 'NaplanujTo/1.0'})
         response = urllib.request.urlopen(req, timeout=3)
         data = json.loads(response.read().decode('utf-8'))
 
@@ -303,7 +305,7 @@ def get_photo(u: str, db: Session = Depends(get_db)):
 _geocode_cache = {}
 GEOCODE_BBOX = (11.7, 49.6, 13.4, 50.6)   # lng_min, lat_min, lng_max, lat_max
 GEOCODE_CENTER = (50.1, 12.7)             # střed kraje - bias, když neznáme polohu uživatele
-GEOCODE_UA = "KrusnoPlan/1.0 (https://github.com/gasiiik/autonomni-planovac-trasy; SOC projekt - planovac tras)"
+GEOCODE_UA = "NaplanujTo/1.0 (https://github.com/gasiiik/autonomni-planovac-trasy; SOC projekt - planovac tras)"
 
 def _norm(t: str) -> str:
     import unicodedata
@@ -385,6 +387,107 @@ def geocode(q: str, lat: Optional[float] = None, lng: Optional[float] = None, db
     results = results[:8]
     _geocode_cache[key] = results
     return results
+
+
+# Trasa po skutečných cestách (OSRM / Valhalla od FOSSGIS). Dotazy jdou přes server: výsledky se drží v paměti
+# (přepnutí dne na mapě nic znovu nestahuje), upstream se volá nejvýš ~2x za vteřinu a při 429/5xx se zkusí znovu.
+import threading
+import time as _time
+_route_cache = {}
+_route_lock = threading.Lock()
+_route_last = [0.0]
+ROUTE_MIN_INTERVAL = 0.5
+OSRM_PROFILES = {"CAR": "routed-car", "BIKE": "routed-bike", "WALK": "routed-foot"}
+
+def _decode_polyline6(shape: str):
+    out, i, lat, lng = [], 0, 0, 0
+    while i < len(shape):
+        for axis in (0, 1):
+            shift = result = 0
+            while True:
+                b = ord(shape[i]) - 63
+                i += 1
+                result |= (b & 0x1f) << shift
+                shift += 5
+                if b < 0x20:
+                    break
+            delta = ~(result >> 1) if result & 1 else result >> 1
+            if axis == 0:
+                lat += delta
+            else:
+                lng += delta
+        out.append([lat / 1e6, lng / 1e6])
+    return out
+
+def _upstream(req: urllib.request.Request):
+    last_err = None
+    for attempt in range(3):
+        with _route_lock:   # sériově a s odstupem, aby veřejná služba neodmítala
+            wait = ROUTE_MIN_INTERVAL - (_time.time() - _route_last[0])
+            if wait > 0:
+                _time.sleep(wait)
+            _route_last[0] = _time.time()
+        try:
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                return json.loads(resp.read().decode("utf-8"))
+        except urllib.error.HTTPError as e:
+            last_err = e
+            if e.code not in (429, 500, 502, 503, 504):
+                break
+        except Exception as e:
+            last_err = e
+        _time.sleep(1.0 + attempt)
+    raise last_err
+
+@app.get("/internal/route")
+def road_route(coords: str, mode: str = "CAR", wheelchair: bool = False):
+    """coords = 'lng,lat;lng,lat;...' -> {"line": [[lat, lng], ...]} po silnicích / cestách."""
+    mode = mode.upper()
+    try:
+        pts = [tuple(map(float, c.split(","))) for c in coords.split(";")]
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Neplatné souřadnice.")
+    if not 2 <= len(pts) <= 60 or any(len(p) != 2 for p in pts):
+        raise HTTPException(status_code=400, detail="Trasa musí mít 2 až 60 bodů.")
+    use_wheel = wheelchair and mode == "WALK"
+    key = (mode, use_wheel, tuple((round(a, 5), round(b, 5)) for a, b in pts))
+    if key in _route_cache:
+        return {"line": _route_cache[key]}
+    try:
+        if use_wheel:
+            body = json.dumps({
+                "locations": [{"lat": b, "lon": a} for a, b in pts], "costing": "pedestrian",
+                "costing_options": {"pedestrian": {"type": "wheelchair", "step_penalty": 1000, "use_hills": 0.1, "max_grade": 6}},
+            }).encode()
+            req = urllib.request.Request("https://valhalla1.openstreetmap.de/route", data=body,
+                                         headers={"User-Agent": GEOCODE_UA, "Content-Type": "application/json"})
+            legs = _upstream(req).get("trip", {}).get("legs", [])
+            line = [p for leg in legs for p in _decode_polyline6(leg["shape"])]
+        else:
+            c = ";".join(f"{a:.5f},{b:.5f}" for a, b in pts)
+            url = f"https://routing.openstreetmap.de/{OSRM_PROFILES.get(mode, 'routed-car')}/route/v1/driving/{c}?overview=full&geometries=geojson"
+            data = _upstream(urllib.request.Request(url, headers={"User-Agent": GEOCODE_UA}))
+            line = [[y, x] for x, y in data["routes"][0]["geometry"]["coordinates"]] if data.get("code") == "Ok" else []
+    except Exception:
+        raise HTTPException(status_code=502, detail="Trasu po cestách se nepodařilo načíst.")
+    if not line:
+        raise HTTPException(status_code=404, detail="Trasa po cestách nenalezena.")
+    if len(_route_cache) > 500:
+        _route_cache.clear()
+    _route_cache[key] = line
+    return {"line": line}
+
+
+@app.get("/internal/reverse")
+def reverse_geocode(lat: float, lng: float):
+    """Souřadnice -> nejbližší adresa (Photon / OpenStreetMap) pro tlačítko "Moje poloha"."""
+    try:
+        url = "https://photon.komoot.io/reverse?" + urllib.parse.urlencode({"lat": lat, "lon": lng, "limit": 1})
+        feats = _http_json(url).get("features", [])
+        label = _photon_label(feats[0]["properties"]) if feats else ""
+    except Exception:
+        label = ""
+    return {"name": label or None}
 
 
 @app.get("/internal/locations")
@@ -601,9 +704,9 @@ def build_plan(req: PlanRequest, db: Session):
     # Validace: Nelze plánovat do minulosti (porovnáváme v českém čase, ne v UTC kontejneru).
     # Tolerance 5 minut: odjezd "teď" zadaný na minuty je o pár sekund starší, než když dorazí požadavek.
     now = datetime.now(LOCAL_TZ).replace(tzinfo=None)
-    if t_from.date() < now.date():
+    if t_from.date() < now.date() and not req.allow_past:
         raise HTTPException(status_code=400, detail="Nelze plánovat trasu na datum v minulosti.")
-    if t_from < now - timedelta(minutes=5):
+    if t_from < now - timedelta(minutes=5) and not req.allow_past:
         raise HTTPException(status_code=400, detail="Nelze plánovat trasu na čas, který již dnes proběhl.")
 
     total_mins = int((t_to - t_from).total_seconds() / 60)
@@ -954,7 +1057,7 @@ def build_plan(req: PlanRequest, db: Session):
         if not pois and out_of_season:
             empty_reason = f"Místa pro zvolené preference v okolí {loc.name} mají v tomto měsíci zavřeno (mimo sezónu)."
         elif not pois and loc.id is None:
-            empty_reason = ("V dosahu vaší polohy nemáme žádná místa pro zvolené preference. KrušnoPlán plánuje výlety "
+            empty_reason = ("V dosahu vaší polohy nemáme žádná místa pro zvolené preference. Aplikace plánuje výlety "
                             "po Karlovarském kraji - zkuste jiné kategorie, auto, nebo vyberte výchozí obec.")
         elif not pois:
             empty_reason = f"V lokaci {loc.name} zatím nemáme žádná místa pro zvolené preference. Zkuste vybrat jiné kategorie (např. Památky)."

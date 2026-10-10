@@ -5,11 +5,28 @@ import { CalendarRange, Heart, LogOut, Map as MapIcon, Route, Trash2 } from 'luc
 import { deleteAccount, deleteTrip, fetchTrips, login, logout, register, useUser } from '../services/account';
 import type { SavedTrip } from '../services/account';
 import { clearLocalFavorites, useFavorites } from '../utils/favorites';
+import { decodePlan, encodePlan } from '../utils/plan';
 
 const inputClass = 'w-full border border-gray-300 rounded-xl p-3 bg-white focus:outline-none focus:ring-2 focus:ring-primary';
 const daysWord = (n: number) => (n === 1 ? 'den' : n < 5 ? 'dny' : 'dní');
 
-const tripUrl = (t: SavedTrip) => `${t.kind === 'vacation' ? '/dovolena/vysledek' : '/result'}?plan=${t.plan}`;
+// Poslední den výletu / dovolené je před dneškem = už proběhl
+const isPast = (t: SavedTrip) => {
+    if (!t.trip_date) return false;
+    const end = new Date(`${t.trip_date}T23:59:59`);
+    end.setDate(end.getDate() + (t.kind === 'vacation' && t.days ? t.days - 1 : 0));
+    return end.getTime() < Date.now();
+};
+
+// Proběhlý výlet se otevře v režimu zobrazení (backend jinak odmítne plánovat do minulosti)
+const tripUrl = (t: SavedTrip) => {
+    let plan = t.plan;
+    if (isPast(t)) {
+        const req = decodePlan(t.plan);
+        if (req) plan = encodePlan({ ...req, allow_past: true });
+    }
+    return `${t.kind === 'vacation' ? '/dovolena/vysledek' : '/result'}?plan=${plan}`;
+};
 
 // Přihlášení / registrace
 function AuthForm() {
@@ -38,7 +55,7 @@ function AuthForm() {
         <div className="max-w-md mx-auto">
             <h1 className="text-3xl md:text-4xl font-bold text-primary-dark mb-2">Můj účet</h1>
             <p className="text-gray-600 mb-6">
-                Účet je dobrovolný – KrušnoPlán můžeš používat i bez něj. S účtem máš oblíbená místa na všech zařízeních
+                Účet je dobrovolný – aplikaci Naplánuj to můžeš používat i bez účtu. S účtem máš oblíbená místa na všech zařízeních
                 a uložené všechny naplánované výlety a dovolené.
             </p>
             <div className="bg-white rounded-3xl shadow-xl shadow-primary/10 border border-secondary p-6 md:p-8">
@@ -129,8 +146,11 @@ function Profile() {
                                     <span className="flex items-center justify-center w-10 h-10 rounded-xl bg-secondary text-primary shrink-0">
                                         <Icon size={20} aria-hidden="true" />
                                     </span>
-                                    <Link to={tripUrl(t)} className="flex-1 min-w-0 group">
-                                        <span className="block font-semibold text-primary-dark group-hover:underline truncate">{t.title}</span>
+                                    <Link to={tripUrl(t)} className="flex-1 min-w-0 group" title={isPast(t) ? 'Zobrazit proběhlý výlet' : undefined}>
+                                        <span className="flex items-center gap-2 min-w-0">
+                                            <span className="font-semibold text-primary-dark group-hover:underline truncate">{t.title}</span>
+                                            {isPast(t) && <span className="shrink-0 text-xs font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">Proběhlo</span>}
+                                        </span>
                                         <span className="block text-sm text-gray-500">
                                             {t.trip_date ? new Date(t.trip_date).toLocaleDateString('cs-CZ', { weekday: 'short', day: 'numeric', month: 'numeric', year: 'numeric' }) : ''}
                                             {t.kind === 'vacation' && t.days ? ` · ${t.days} ${daysWord(t.days)}` : ''}

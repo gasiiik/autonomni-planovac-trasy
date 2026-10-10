@@ -76,7 +76,7 @@ export default function Events() {
             <p className="text-sm text-gray-500 border-t border-gray-100 pt-6">
                 Akce zveřejňuje a spravuje Karlovarský kraj v kalendáři{' '}
                 <a href={EVENTS_BASE} {...external} className="underline hover:text-primary">kamnazapade.cz</a>.
-                KrušnoPlán na něj jen odkazuje – před cestou si údaje o akci ověř u pořadatele.
+                Aplikace na něj jen odkazuje – před cestou si údaje o akci ověř u pořadatele.
             </p>
         </div>
     );

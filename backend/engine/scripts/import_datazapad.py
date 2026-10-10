@@ -54,7 +54,7 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 ARCGIS_BASE = "https://services-eu1.arcgis.com/rWPztfBz4QnSDpfD/arcgis/rest/services/"
 # Wikimedia vyžaduje v User-Agent kontakt (URL/e-mail), jinak vrací HTTP 429 na každý dotaz
-USER_AGENT = "KrusnoPlan/1.0 (https://github.com/gasiiik/autonomni-planovac-trasy; SOC projekt - planovac tras)"
+USER_AGENT = "NaplanujTo/1.0 (https://github.com/gasiiik/autonomni-planovac-trasy; SOC projekt - planovac tras)"
 
 # Konfigurace vrstev DataZápad -> naše kategorie a odhady pro plánovač
 #   duration = průměrná délka návštěvy (min), price = odhad vstupného (Kč), pokud je placené

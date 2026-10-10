@@ -15,7 +15,7 @@ from pathlib import Path
 from sqlalchemy import text
 
 PHOTO_DIR = Path(os.getenv("PHOTO_CACHE_DIR", "/data/photos"))
-USER_AGENT = "KrusnoPlan/1.0 (https://github.com/gasiiik/autonomni-planovac-trasy; SOC projekt - planovac tras)"
+USER_AGENT = "NaplanujTo/1.0 (https://github.com/gasiiik/autonomni-planovac-trasy; SOC projekt - planovac tras)"
 MAX_BYTES = 8 * 1024 * 1024
 _upstream = threading.Semaphore(2)    # nejvýš 2 stahování najednou (ohleduplně k Wikimedii)
 
