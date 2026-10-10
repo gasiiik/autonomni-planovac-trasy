@@ -128,8 +128,8 @@ Hesla k databázi jsou zatím uvedena přímo v `docker-compose.yml` a slouží 
 
 ## Tým
 - Oleksandr Kerestii ([@oleksandr106](https://github.com/oleksandr106)) – developer
-- Lukáš Nováček – developer
-- Jara Bouška – developer
+- Lukáš Nováček ([@gasiiik](https://github.com/gasiiik)) – developer
+- Jara Bouška ([@Jerry-Pribi](https://github.com/Jerry-Pribi)) – developer
 
 ## Licence
 Kód: [MIT](LICENSE). Ostatní obsah: CC BY 4.0.
