@@ -674,6 +674,20 @@ _BLOCKED_PAIRS = (
 )
 
 
+# Ručně dohledané a zkontrolované fotky (Commons / oficiální weby), mají přednost před automatickým hledáním
+MANUAL_IMAGES = {
+    "ZĂˇmek Ostrov": "https://thumb.wikimedia.org/wikipedia/commons/thumb/3/3c/Ostrov%2C_z%C3%A1mek_%281%29.jpg/960px-Ostrov%2C_z%C3%A1mek_%281%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+    "ZĹ™Ă­cenina zĂˇmku Hammerhof (HamrnĂ­ky)": "https://thumb.wikimedia.org/wikipedia/commons/thumb/e/ed/Hammerhof_%282416%29.jpg/960px-Hammerhof_%282416%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+    "Muzeum Abertamy": "https://thumb.wikimedia.org/wikipedia/commons/thumb/3/37/Abertamy%2C_muzeum%2C_mineralogie_%283%29.jpg/960px-Abertamy%2C_muzeum%2C_mineralogie_%283%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+    "DĹŻl Mauritius": "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/57/H%C5%99ebe%C4%8Dn%C3%A1_d%C5%AFl_Mauritius_vstup_do_podzem%C3%AD.jpg/960px-H%C5%99ebe%C4%8Dn%C3%A1_d%C5%AFl_Mauritius_vstup_do_podzem%C3%AD.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+    "Kostel svatĂ©ho JĂˇchyma v JĂˇchymovÄ›": "https://thumb.wikimedia.org/wikipedia/commons/thumb/d/d8/J%C3%A1chymov_%28KV%29%2C_kostel_sv._J%C3%A1chyma.jpg/960px-J%C3%A1chymov_%28KV%29%2C_kostel_sv._J%C3%A1chyma.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+    "Muzeum numismatiky v Chebu": "https://www.mncheb.cz/wp-content/uploads/2024/07/muzeum-1-1-1024x461.jpg",
+    "Festivalový most v Karlových Varech": "https://cdn.kudyznudy.cz/files/0c/0c593ae9-6447-4d03-a2f3-7de4da89860a.jpg?v=20250326062629",
+    "Přírodní památka Čertkus": "https://cdn.kudyznudy.cz/files/89/8951376f-1904-4afb-9ff6-75e9ec292e09.jpg?v=20250304022515",
+    "Lyžařský klub Kraslice - Ski a Trail park Saporo": "https://www.lkkraslice.cz/img/picture/154/titulni_1_1920x937.jpg",
+}
+
+
 def blocked_image(name, url):
     if not url:
         return False
@@ -858,6 +872,8 @@ def run_import(with_images=True, dry_run=False, refresh_images=False):
                 fields["image_url"] = poi.get("image_url")
             if row and blocked_image(row.name, row.image_url):
                 fields["image_url"] = None   # dříve přiřazená špatná fotka
+            if MANUAL_IMAGES.get(poi.get("name")):
+                fields["image_url"] = MANUAL_IMAGES[poi["name"]]
 
             if row:
                 for k, v in fields.items():
