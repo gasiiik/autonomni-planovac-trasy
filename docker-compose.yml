@@ -1,0 +1,5 @@
+# Spuštění celého projektu z hlavní složky: docker compose up --build
+# Vlastní konfigurace je v backend/docker-compose.yml (databáze, brána, plánovač, web)
+name: backend   # stejný název projektu jako při spuštění ze složky backend -> stejné kontejnery i data
+include:
+  - backend/docker-compose.yml
