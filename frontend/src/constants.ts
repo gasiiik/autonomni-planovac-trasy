@@ -35,6 +35,23 @@ export const TAG_LABELS: Record<string, string> = {
     ZOO: 'ZOO a minizoo',
 };
 
+// Zájmy = kategorie míst v backendu (data z DataZápad) - průvodce výletu i dovolené
+export const INTERESTS: { value: Category; label: string; hint: string }[] = [
+    { value: 'SIGHTSEEING', label: 'Památky', hint: 'hrady, zámky, muzea, rozhledny, prameny' },
+    { value: 'PARK', label: 'Příroda', hint: 'přírodní pozoruhodnosti, zahrady, arboreta' },
+    { value: 'FUN', label: 'Zábava a sport', hint: 'ZOO, aquaparky, lanová centra, golf, lyžování, koně' },
+];
+export const ALL_INTERESTS: Category[] = ['SIGHTSEEING', 'PARK', 'FUN'];
+
+export const FOOD_PREFERENCES = [
+    { value: 'PIVOVAR', label: 'Pivovar' },
+    { value: 'CAFE', label: 'Kavárna' },
+    { value: 'VEGETARIAN', label: 'Vegetariánské' },
+];
+
+// Barvy dnů dovolené (přehledová mapa, záložky dnů)
+export const DAY_COLORS = ['#087F78', '#B45309', '#7C3AED', '#DC2626', '#0284C7', '#15803D', '#DB2777'];
+
 export const TRANSPORT_LABELS: Record<string, string> = {
     CAR: 'Autem',
     BIKE: 'Na kole',

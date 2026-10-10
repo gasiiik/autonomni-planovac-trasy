@@ -3,28 +3,13 @@ import type { ChangeEvent, FormEvent } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import type { Category, Location, PlanRequest } from '../types/api';
 import { fetchLocations } from '../services/apiClient';
-import { CalendarRange, Check, LocateFixed, MapPin, Sun, X } from 'lucide-react';
-import { DIFFICULTY_LABELS, TRANSPORT_LABELS } from '../constants';
+import { Check, LocateFixed } from 'lucide-react';
+import { ALL_INTERESTS, DIFFICULTY_LABELS, FOOD_PREFERENCES, INTERESTS, TRANSPORT_LABELS } from '../constants';
 import { CategoryBadge, TransportIcon } from '../components/Icons';
 import LocationPicker from '../components/LocationPicker';
-import { addDays, allocateDays } from '../utils/vacation';
 import { defaultTimes, localDate, normalizeTimes, nowRounded, resultUrl } from '../utils/plan';
 
 const STEPS = 6;
-
-// Zájmy = kategorie míst v backendu (data z DataZápad)
-const INTERESTS: { value: Category; label: string; hint: string }[] = [
-    { value: 'SIGHTSEEING', label: 'Památky', hint: 'hrady, zámky, muzea, rozhledny, prameny' },
-    { value: 'PARK', label: 'Příroda', hint: 'přírodní pozoruhodnosti, zahrady, arboreta' },
-    { value: 'FUN', label: 'Zábava a sport', hint: 'ZOO, aquaparky, lanová centra, golf, lyžování, koně' },
-];
-const ALL_INTERESTS: Category[] = ['SIGHTSEEING', 'PARK', 'FUN'];
-
-const FOOD_PREFERENCES = [
-    { value: 'PIVOVAR', label: 'Pivovar' },
-    { value: 'CAFE', label: 'Kavárna' },
-    { value: 'VEGETARIAN', label: 'Vegetariánské' },
-];
 
 const inputClass = 'w-full border border-gray-300 rounded-xl p-3 focus:outline-none focus:ring-2 focus:ring-primary';
 
@@ -41,9 +26,6 @@ const distanceKm = (a: { lat: number; lng: number }, b: { lat: number; lng: numb
 interface WizardForm {
     location_id: string;
     start?: StartPosition | null;
-    mode?: 'trip' | 'vacation';    // jednodenní výlet / dovolená
-    vacation_days?: string;
-    vacation_towns?: string[];     // obce v pořadí návštěvy
     date: string;
     time_from: string;
     time_to: string;
@@ -68,9 +50,9 @@ function initialForm(presetLocation: string | null): WizardForm {
             const form: WizardForm = JSON.parse(saved);
             // Staré zadání (jiný den nebo čas, který už proběhl) -> aktuální časy
             const fresh = form.date < localDate(new Date()) ? { ...form, ...defaultTimes() } : normalizeTimes(form);
-            // Výchozí místo se nepamatuje (obec, poloha ani obce dovolené) - uživatel ho vždy vybere sám.
+            // Výchozí místo se nepamatuje (obec ani poloha) - uživatel ho vždy vybere sám.
             // Výjimka: "Naplánovat výlet odsud" z detailu místa obec předvyplní.
-            return { ...fresh, start: null, location_id: presetLocation ?? '', vacation_towns: [] };
+            return { ...fresh, start: null, location_id: presetLocation ?? '' };
         }
     } catch {
         // poškozená data v session storage ignorujeme
@@ -90,35 +72,20 @@ function initialForm(presetLocation: string | null): WizardForm {
         has_children: false,
         indoor_when_rain: false,
         start: null,
-        mode: 'trip',
-        vacation_days: '5',
-        vacation_towns: [],
     };
 }
 
-const MAX_VACATION_DAYS = 14;
-
-function toPlanRequest(f: WizardForm, dailyFrom?: string): PlanRequest {
+function toPlanRequest(f: WizardForm): PlanRequest {
     const interests = f.interests.length > 0 ? [...f.interests] : [...ALL_INTERESTS];
     if (f.gastro) interests.push('GASTRO');
-    const vacation = f.mode === 'vacation'
-        ? {
-            towns: (f.vacation_towns ?? []).map(Number),
-            days: Math.min(MAX_VACATION_DAYS, Math.max(1, parseInt(f.vacation_days ?? '1') || 1)),
-            daily_from: `${dailyFrom ?? f.time_from}:00`,
-        }
-        : null;
     return {
-        vacation,
-        ...(vacation
-            ? { location_id: vacation.towns[0] }
-            : f.start
-                ? { start_lat: f.start.lat, start_lng: f.start.lng, start_name: f.start.name }
-                : { location_id: parseInt(f.location_id) }),
+        ...(f.start
+            ? { start_lat: f.start.lat, start_lng: f.start.lng, start_name: f.start.name }
+            : { location_id: parseInt(f.location_id) }),
         time_from: `${f.date} ${f.time_from}:00`,
         time_to: `${f.date} ${f.time_to}:00`,
         transport_mode: f.transport_mode,
-        route_type: vacation ? 'LOOP' : f.route_type, // na dovolené každý den okruh z ubytování
+        route_type: f.route_type,
         interests,
         food_preferences: f.gastro ? f.food_preferences : [],
         willing_to_pay_entry: f.willing_to_pay_entry,
@@ -188,34 +155,13 @@ export default function Wizard() {
         });
     };
 
-    const isVacation = formData.mode === 'vacation';
-    const vacationDays = parseInt(formData.vacation_days ?? '') || 0;
-    const vacationTowns = formData.vacation_towns ?? [];
-    const townName = (id: string) => locations.find(l => String(l.id) === id)?.name ?? '…';
-
-    const setMode = (mode: 'trip' | 'vacation') => {
-        setStepError('');
-        setFormData(prev => mode === prev.mode ? prev : mode === 'vacation'
-            // Dovolená: časy jsou "denně od-do", typicky od zítřka 9:00-18:00
-            ? { ...prev, mode, date: prev.date <= localDate(new Date()) ? addDays(localDate(new Date()), 1) : prev.date, time_from: '09:00', time_to: '18:00', start: null }
-            : { ...prev, mode });
-    };
-
     const validateStep = (): string => {
-        if (step === 1 && isVacation && (vacationDays < 1 || vacationDays > MAX_VACATION_DAYS)) {
-            return `Délka dovolené musí být 1 až ${MAX_VACATION_DAYS} dní.`;
-        }
-        if (step === 2 && isVacation) {
-            if (vacationTowns.length === 0) return 'Vyber aspoň jednu obec, kterou chceš navštívit.';
-            if (vacationTowns.length > vacationDays * 3) return `Na ${vacationDays} dní je to moc obcí – vyber nejvýš ${vacationDays * 3} (3 za den), nebo prodluž dovolenou.`;
-            return '';
-        }
         if (step === 1) {
             if (formData.time_to <= formData.time_from) return 'Čas návratu musí být později než čas odjezdu.';
             const start = new Date(`${formData.date}T${formData.time_from}`);
             if (start < new Date()) return 'Tento čas už proběhl – vyber pozdější čas nebo jiný den.';
         }
-        if (step === 2 && !isVacation && !formData.location_id && !formData.start) return 'Vyber výchozí obec, nebo použij svou polohu.';
+        if (step === 2 && !formData.location_id && !formData.start) return 'Vyber výchozí obec, nebo použij svou polohu.';
         return '';
     };
 
@@ -228,10 +174,9 @@ export default function Wizard() {
 
     const handleSubmit = () => {
         // Mezitím mohl čas odjezdu proběhnout (průvodce byl dlouho otevřený) -> posuneme na teď
-        const dailyFrom = formData.time_from; // u dovolené start 2. a dalších dní (1. den může začínat "teď")
         const form = normalizeTimes(formData);
         sessionStorage.setItem('wizardForm', JSON.stringify(form));
-        navigate(resultUrl(toPlanRequest(form, dailyFrom)));
+        navigate(resultUrl(toPlanRequest(form)));
     };
 
     const onSubmit = (e: FormEvent) => {
@@ -257,34 +202,18 @@ export default function Wizard() {
                     {step === 1 && (
                         <div className="space-y-6">
                             <h2 className="text-2xl font-bold text-primary-dark">Krok 1 – Čas a datum</h2>
-                            <div className="grid grid-cols-2 gap-3">
-                                {([['trip', 'Jednodenní výlet', Sun], ['vacation', 'Dovolená', CalendarRange]] as const).map(([mode, label, Icon]) => (
-                                    <button key={mode} type="button" onClick={() => setMode(mode)} aria-pressed={(formData.mode ?? 'trip') === mode}
-                                        className={`flex items-center justify-center gap-2 p-4 rounded-2xl border-2 font-semibold transition ${(formData.mode ?? 'trip') === mode ? 'border-primary bg-secondary text-primary-dark' : 'border-gray-200 text-gray-600 hover:border-primary'}`}>
-                                        <Icon size={22} className="text-primary" aria-hidden="true" /> {label}
-                                    </button>
-                                ))}
-                            </div>
-                            <div className={isVacation ? 'grid grid-cols-1 sm:grid-cols-2 gap-4' : ''}>
                             <div>
-                                <label className="block text-primary-dark mb-2">{isVacation ? 'Datum příjezdu' : 'Datum výletu'}</label>
+                                <label className="block text-primary-dark mb-2">Datum výletu</label>
                                 <input type="date" name="date" min={localDate(new Date())} value={formData.date} onChange={handleChange} className={inputClass} required />
-                            </div>
-                            {isVacation && (
-                                <div>
-                                    <label className="block text-primary-dark mb-2">Počet dní</label>
-                                    <input type="number" name="vacation_days" min="1" max={MAX_VACATION_DAYS} value={formData.vacation_days ?? ''} onChange={handleChange} className={inputClass} required />
-                                </div>
-                            )}
                             </div>
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-primary-dark mb-2">{isVacation ? 'Výlety denně od' : 'Čas odjezdu'}</label>
+                                    <label className="block text-primary-dark mb-2">Čas odjezdu</label>
                                     <input type="time" name="time_from" value={formData.time_from} onChange={handleChange} onBlur={fixTimes}
                                         min={formData.date === localDate(new Date()) ? nowRounded() : undefined} className={inputClass} required />
                                 </div>
                                 <div>
-                                    <label className="block text-primary-dark mb-2">{isVacation ? 'do' : 'Čas návratu'}</label>
+                                    <label className="block text-primary-dark mb-2">Čas návratu</label>
                                     <input type="time" name="time_to" value={formData.time_to} onChange={handleChange} onBlur={fixTimes}
                                         min={formData.time_from} className={inputClass} required />
                                 </div>
@@ -296,46 +225,8 @@ export default function Wizard() {
                         <div className="space-y-6">
                             <h2 className="text-2xl font-bold text-primary-dark">Krok 2 – Výchozí místo a doprava</h2>
                             <div>
-                                <label className="block text-primary-dark mb-2">{isVacation ? 'Které obce chceš navštívit?' : 'Výchozí místo'}</label>
-                                {isVacation && !locationsError ? (
-                                    <div>
-                                        {vacationTowns.length > 0 && (
-                                            <ol className="flex flex-wrap gap-2 mb-3">
-                                                {vacationTowns.map((id, i) => (
-                                                    <li key={id} className="inline-flex items-center gap-2 pl-3 pr-2 py-1.5 rounded-full bg-secondary text-primary-dark font-semibold">
-                                                        <span className="text-xs text-primary">{i + 1}.</span> {townName(id)}
-                                                        <button type="button" aria-label={`Odebrat ${townName(id)}`} className="text-gray-500 hover:text-primary-dark"
-                                                            onClick={() => setFormData(prev => ({ ...prev, vacation_towns: (prev.vacation_towns ?? []).filter(t => t !== id) }))}>
-                                                            <X size={16} />
-                                                        </button>
-                                                    </li>
-                                                ))}
-                                            </ol>
-                                        )}
-                                        <LocationPicker
-                                            locations={locations.filter(l => !vacationTowns.includes(String(l.id)))}
-                                            value=""
-                                            onSelect={id => { setStepError(''); setFormData(prev => ({ ...prev, vacation_towns: [...(prev.vacation_towns ?? []), id] })); }}
-                                            onClearStart={() => undefined}
-                                        />
-                                        {vacationTowns.length > 0 && vacationDays > 0 && vacationTowns.length <= vacationDays * 3 && (
-                                            <div className="mt-3 rounded-xl bg-secondary/60 p-3">
-                                                <p className="text-sm font-semibold text-primary-dark flex items-center gap-1.5 mb-1">
-                                                    <MapPin size={15} className="text-primary" aria-hidden="true" /> Rozvrh dovolené
-                                                </p>
-                                                <ol className="text-sm text-gray-700 space-y-0.5">
-                                                    {allocateDays(vacationDays, vacationTowns.map(Number)).map((group, d) => (
-                                                        <li key={d}><span className="text-gray-500">Den {d + 1}:</span> {group.map(id => townName(String(id))).join(' + ')}</li>
-                                                    ))}
-                                                </ol>
-                                            </div>
-                                        )}
-                                        <p className="text-sm text-gray-500 mt-2">
-                                            Obce navštívíme v pořadí výběru. Když vybereš víc obcí než dní, spojíme je do jednoho výletu přes víc měst.
-                                            Když míň, budeme v obci víc dní a dojde-li tam program, přidáme okolní obce. U každé obce, kde bydlíš, nabídneme ubytování.
-                                        </p>
-                                    </div>
-                                ) : locationsError ? (
+                                <label className="block text-primary-dark mb-2">Výchozí místo</label>
+                                {locationsError ? (
                                     <p className="bg-red-100 text-red-700 p-3 rounded-xl">{locationsError}</p>
                                 ) : (
                                     <LocationPicker
@@ -346,7 +237,7 @@ export default function Wizard() {
                                         onClearStart={() => setFormData(prev => ({ ...prev, start: null }))}
                                     />
                                 )}
-                                {!isVacation && !formData.start && !locationsError && (
+                                {!formData.start && !locationsError && (
                                     <button type="button" onClick={useMyLocation} disabled={locating || !locations.length}
                                         title="Nepovinné – místo obce můžeš vyrazit z místa, kde právě jsi"
                                         className="mt-3 inline-flex items-center gap-2 px-4 py-2 rounded-full border-2 border-primary text-primary font-semibold hover:bg-primary hover:text-white transition disabled:opacity-60">
@@ -367,8 +258,6 @@ export default function Wizard() {
                                 </div>
                                 <p className="text-sm text-gray-500 mt-2">Pěšky hledáme do 3 km, na kole do 15 km a autem do 40 km od startu.</p>
                             </div>
-                            {/* Na dovolené je každý den okruh z ubytování - volba návratu nemá smysl */}
-                            {!isVacation && (
                             <div>
                                 <label className="block text-primary-dark mb-2">Návrat</label>
                                 <div className="flex flex-wrap gap-4">
@@ -382,7 +271,6 @@ export default function Wizard() {
                                     </label>
                                 </div>
                             </div>
-                            )}
                         </div>
                     )}
 
@@ -474,12 +362,9 @@ export default function Wizard() {
                         <div className="space-y-6">
                             <h2 className="text-2xl font-bold text-primary-dark">Krok 6 – Shrnutí</h2>
                             <div className="bg-secondary p-6 rounded-xl space-y-2">
-                                {isVacation && (
-                                    <p><strong>Dovolená:</strong> {vacationDays} {vacationDays === 1 ? 'den' : vacationDays < 5 ? 'dny' : 'dní'} – {vacationTowns.map(townName).join(' → ')}</p>
-                                )}
-                                <p><strong>{isVacation ? 'Příjezd:' : 'Datum:'}</strong> {new Date(formData.date).toLocaleDateString('cs-CZ')}</p>
+                                <p><strong>Datum:</strong> {new Date(formData.date).toLocaleDateString('cs-CZ')}</p>
                                 <p><strong>Čas:</strong> {formData.time_from} – {formData.time_to}</p>
-                                {!isVacation && <p><strong>Start:</strong> {locationName ?? '–'}</p>}
+                                <p><strong>Start:</strong> {locationName ?? '–'}</p>
                                 <p><strong>Doprava:</strong> {TRANSPORT_LABELS[formData.transport_mode]}, {formData.route_type === 'LOOP' ? 'okruh' : 'jednosměrně'}</p>
                                 <p><strong>Zájmy:</strong> {formData.interests.length ? INTERESTS.filter(i => formData.interests.includes(i.value)).map(i => i.label).join(', ') : 'Překvap mě'}{formData.gastro ? ' + jídlo' : ''}</p>
                                 <p><strong>Vstupné:</strong> {formData.willing_to_pay_entry ? 'ano' : 'jen zdarma'}{formData.budget_max ? `, max. ${formData.budget_max} Kč` : ''}</p>

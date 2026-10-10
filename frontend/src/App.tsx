@@ -6,6 +6,7 @@ import Result from './pages/Result';
 import MapPage from './pages/MapPage';
 import PlaceDetail from './pages/PlaceDetail';
 import Events from './pages/Events';
+import VacationWizard from './pages/VacationWizard';
 
 function App() {
   return (
@@ -18,6 +19,8 @@ function App() {
           <Route path="mapa" element={<MapPage />} />
           <Route path="misto/:id" element={<PlaceDetail />} />
           <Route path="akce" element={<Events />} />
+          <Route path="dovolena" element={<VacationWizard />} />
+          <Route path="dovolena/vysledek" element={<Result />} />
           {/* Neexistující adresa (např. zrušená /o-datech) -> úvodní stránka */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>

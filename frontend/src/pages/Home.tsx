@@ -6,7 +6,7 @@ import { CATEGORY_LABELS, THEMES, TRANSPORT_LABELS } from '../constants';
 import { CategoryTag } from '../components/Icons';
 import type { Theme } from '../constants';
 import { defaultTimes, resultUrl } from '../utils/plan';
-import { ArrowRight, CalendarClock, CloudSun, Coins, Repeat, Sun, UtensilsCrossed } from 'lucide-react';
+import { ArrowRight, CalendarClock, CalendarRange, CloudSun, Coins, Repeat, Sun, UtensilsCrossed } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import DataCounter from '../components/DataCounter';
 import PlaceImage from '../components/PlaceImage';
@@ -104,14 +104,17 @@ export default function Home() {
                     <p className="text-lg md:text-xl lg:text-2xl mb-10 text-white/95 drop-shadow-md font-medium leading-relaxed max-w-3xl mx-auto">
                         Vyber si, co chceš zažít a jaké máš možnosti. Náš algoritmus za tebe naplánuje celou trasu po Karlovarském kraji, ideální zastávky i časový harmonogram na míru.
                     </p>
-                    <div className="flex flex-col sm:flex-row justify-center gap-4 sm:gap-6">
-                        <Link to="/wizard" className="bg-accent text-primary-dark px-10 py-5 rounded-full font-bold text-xl hover:bg-yellow-400 transition shadow-xl transform hover:-translate-y-1">
-                            Začít plánovat výlet
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-2xl mx-auto">
+                        <Link to="/wizard" className="group flex flex-col items-center gap-1 bg-accent text-primary-dark px-8 py-5 rounded-3xl font-bold hover:bg-yellow-400 transition shadow-xl transform hover:-translate-y-1">
+                            <span className="flex items-center gap-2 text-xl"><Sun size={24} aria-hidden="true" /> Výlet na den</span>
+                            <span className="text-sm font-medium opacity-80">harmonogram na jeden den</span>
                         </Link>
-                        <Link to="/mapa" className="bg-white/15 backdrop-blur border border-white/40 text-white px-8 py-5 rounded-full font-bold text-xl hover:bg-white/25 transition">
-                            Prohlédnout mapu míst
+                        <Link to="/dovolena" className="group flex flex-col items-center gap-1 bg-white text-primary-dark px-8 py-5 rounded-3xl font-bold hover:bg-secondary transition shadow-xl transform hover:-translate-y-1">
+                            <span className="flex items-center gap-2 text-xl"><CalendarRange size={24} aria-hidden="true" /> Dovolená</span>
+                            <span className="text-sm font-medium opacity-80">víc dní, víc měst a ubytování</span>
                         </Link>
                     </div>
+                    <Link to="/mapa" className="inline-block mt-6 text-white/90 font-semibold underline hover:text-accent">Nebo si prohlédni mapu všech míst</Link>
                 </div>
 
                 {/* Organický tvar (vlna) naspodu */}

@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import type { ItineraryItem, PlanRequest, PlanResponse } from '../types/api';
 import { generatePlan } from '../services/apiClient';
 import { BedDouble, CalendarDays, CalendarPlus, Check, Clock, CloudRain, CloudSun, ExternalLink, MapPin, Navigation, Printer, Share2, Sun } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import { CATEGORY_LABELS, TRANSPORT_LABELS } from '../constants';
+import { CATEGORY_LABELS, DAY_COLORS, TRANSPORT_LABELS } from '../constants';
 import { CategoryTag, TransportIcon, WeatherIcon } from '../components/Icons';
 import { decodePlan } from '../utils/plan';
 import { downloadIcs } from '../utils/calendar';
@@ -13,6 +13,7 @@ import { cityEventsUrl, townFromStartName, EVENTS_CALENDAR_URL } from '../utils/
 import { planVacation } from '../utils/vacation';
 import type { Stay, Trip } from '../utils/vacation';
 import RouteMap from '../components/RouteMap';
+import TripOverviewMap from '../components/TripOverviewMap';
 import PlaceImage from '../components/PlaceImage';
 
 const formatMins = (mins: number) => {
@@ -198,6 +199,8 @@ export default function Result() {
 
     const tripDay = trip?.days[activeDay] ?? null;
     const result = tripDay?.plan ?? single;
+    // Pro přehledovou mapu jen jednou (jinak by se překreslovala při každém najetí myší)
+    const overviewDays = useMemo(() => trip?.days.map(d => d.plan.waypoints) ?? [], [trip]);
 
     // Klik na značku v mapě -> posun seznamu na zastávku
     const selectStop = useCallback((n: number) => {
@@ -230,7 +233,7 @@ export default function Result() {
                         <p className="text-sm mt-2">Backend pravděpodobně není dostupný. Zkontrolujte docker kontejnery.</p>
                     ) : null}
                 </div>
-                <Link to="/wizard" className="text-primary underline">Upravit zadání</Link>
+                <Link to={request?.vacation ? '/dovolena' : '/wizard'} className="text-primary underline">Upravit zadání</Link>
             </div>
         );
     }
@@ -253,12 +256,23 @@ export default function Result() {
                     {trip && (
                         <div className="mb-6 print:hidden">
                             <p className="text-sm font-semibold uppercase tracking-widest text-primary">Dovolená · {trip.days.length} {trip.days.length === 1 ? 'den' : trip.days.length < 5 ? 'dny' : 'dní'}</p>
-                            <p className="text-gray-600 mt-1 mb-4">{trip.stays.map(s => `${s.town.name} (${s.days} ${s.days === 1 ? 'den' : s.days < 5 ? 'dny' : 'dní'})`).join(' → ')}</p>
+                            <p className="text-gray-600 mt-1 mb-4">Bydlení: {trip.stays.map(s => `${s.town.name} (${s.days} ${s.days === 1 ? 'noc' : s.days < 5 ? 'noci' : 'nocí'})`).join(' → ')}</p>
+                            {/* Přehled celé dovolené */}
+                            <div className="bg-primary text-white p-5 rounded-2xl mb-4 grid grid-cols-3 gap-4 text-center shadow-md">
+                                <div><p className="text-2xl font-extrabold">{trip.days.reduce((n, d) => n + d.plan.itinerary.filter(i => i.type === 'poi').length, 0)}</p><p className="text-sm text-white/80">míst celkem</p></div>
+                                <div><p className="text-2xl font-extrabold">{Math.round(trip.days.reduce((n, d) => n + d.plan.itinerary.reduce((k, i) => k + (i.distance_km ?? 0), 0), 0))} km</p><p className="text-sm text-white/80">na cestách</p></div>
+                                <div><p className="text-2xl font-extrabold">{Math.round(trip.days.reduce((n, d) => n + d.plan.total_estimated_cost, 0))} Kč</p><p className="text-sm text-white/80">vstupné celkem</p></div>
+                            </div>
+                            <div className="h-72 rounded-2xl overflow-hidden border border-secondary mb-2 relative z-0">
+                                <TripOverviewMap days={overviewDays} onSelectDay={d => { setActiveDay(d); setActiveStop(null); }} />
+                            </div>
+                            <p className="text-xs text-gray-500 mb-4">Každý den má jinou barvu, žluté body jsou ubytování. Kliknutím na trasu otevřeš daný den.</p>
                             <div className="flex flex-wrap gap-2" role="tablist">
                                 {trip.days.map((d, i) => (
                                     <button key={d.date} role="tab" aria-selected={i === activeDay}
                                         onClick={() => { setActiveDay(i); setActiveStop(null); }}
-                                        className={`px-4 py-2 rounded-full text-sm font-semibold transition ${i === activeDay ? 'bg-primary text-white' : 'bg-secondary text-primary-dark hover:bg-primary/20'}`}>
+                                        className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-semibold transition ${i === activeDay ? 'bg-primary text-white' : 'bg-secondary text-primary-dark hover:bg-primary/20'}`}>
+                                        <span className="w-2.5 h-2.5 rounded-full" style={{ background: DAY_COLORS[i % DAY_COLORS.length] }} />
                                         Den {i + 1} · {new Date(d.date).toLocaleDateString('cs-CZ', { weekday: 'short', day: 'numeric', month: 'numeric' })}
                                     </button>
                                 ))}
@@ -293,7 +307,7 @@ export default function Result() {
                         <div className="bg-amber-50 border border-amber-200 text-amber-900 p-6 rounded-xl mb-6">
                             <p className="font-semibold mb-2">Výlet se nepodařilo naplánovat</p>
                             <p>{result.empty_reason}</p>
-                            <Link to="/wizard" className="inline-block mt-4 text-primary font-semibold underline">Upravit zadání</Link>
+                            <Link to={request?.vacation ? '/dovolena' : '/wizard'} className="inline-block mt-4 text-primary font-semibold underline">Upravit zadání</Link>
                         </div>
                     ) : (
                         <>
@@ -391,8 +405,8 @@ export default function Result() {
                     })()}
 
                     <div className="mt-8 flex flex-wrap gap-4 print:hidden">
-                        <Link to="/wizard" className="px-6 py-3 border border-primary text-primary font-bold rounded-full hover:bg-primary hover:text-white transition">
-                            Upravit výlet
+                        <Link to={request?.vacation ? '/dovolena' : '/wizard'} className="px-6 py-3 border border-primary text-primary font-bold rounded-full hover:bg-primary hover:text-white transition">
+                            {request.vacation ? 'Upravit dovolenou' : 'Upravit výlet'}
                         </Link>
                     </div>
                 </div>

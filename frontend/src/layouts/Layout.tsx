@@ -24,17 +24,20 @@ export default function Layout() {
         <div className="min-h-screen flex flex-col">
             <header className={`print:hidden fixed top-6 left-0 w-full z-50 px-4 transition-transform duration-300 ${isVisible ? 'translate-y-0' : '-translate-y-[150%]'}`}>
                 <div className="container mx-auto flex justify-center">
-                    <div className="bg-primary/80 backdrop-blur-md border border-white/20 shadow-lg rounded-full px-6 py-2 flex items-center justify-between w-full max-w-2xl">
+                    <div className="bg-primary/80 backdrop-blur-md border border-white/20 shadow-lg rounded-full px-6 py-2 flex items-center justify-between w-full max-w-4xl">
                         <Link to="/" className="flex items-center gap-2 font-bold tracking-wide text-xl text-white hover:text-accent transition-colors shrink-0">
                             <img src="/images/logo.png" alt="" className="h-8 w-auto rounded-md" />
                             KrušnoPlán
                         </Link>
                         
-                        <nav className="flex items-center gap-6 font-medium text-sm text-white">
-                            <Link to="/" className="hover:text-accent transition-colors hidden sm:block">Domů</Link>
-                            <Link to="/mapa" className="hover:text-accent transition-colors hidden sm:block">Mapa míst</Link>
-                            <Link to="/akce" className="hover:text-accent transition-colors hidden md:block">Kalendář akcí</Link>
-                            <Link to="/wizard" className="bg-accent text-primary-dark hover:bg-yellow-400 transition-colors px-5 py-2 rounded-full font-bold shadow-sm whitespace-nowrap">
+                        <nav className="flex items-center gap-3 lg:gap-6 font-medium text-sm text-white">
+                            <Link to="/" className="hover:text-accent transition-colors hidden lg:block">Domů</Link>
+                            <Link to="/mapa" className="hover:text-accent transition-colors hidden md:block">Mapa míst</Link>
+                            <Link to="/akce" className="hover:text-accent transition-colors hidden lg:block">Kalendář akcí</Link>
+                            <Link to="/dovolena" className="border-2 border-accent text-accent hover:bg-accent hover:text-primary-dark transition-colors px-4 py-1.5 rounded-full font-bold whitespace-nowrap hidden sm:block">
+                                Naplánovat dovolenou
+                            </Link>
+                            <Link to="/wizard" className="bg-accent text-primary-dark hover:bg-yellow-400 transition-colors px-4 lg:px-5 py-2 rounded-full font-bold shadow-sm whitespace-nowrap">
                                 Naplánovat výlet
                             </Link>
                         </nav>
