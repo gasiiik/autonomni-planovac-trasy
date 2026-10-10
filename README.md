@@ -18,10 +18,24 @@ Naplánuj to z otevřených dat Karlovarského kraje sestaví výlet nebo celou 
 - **Hodnota otevřených dat** – ukazuje, že data, která kraj zveřejňuje (DataZápad), jdou proměnit v praktickou službu pro občany a návštěvníky.
 - **Možný další rozvoj** *(zatím není součástí prototypu)*: anonymní přehled, která místa lidé plánují nejčastěji – podklad pro kraj, kam směřovat propagaci nebo investice.
 
+## Funkce
+
+- **Výlet na den:** průvodce o 6 krocích (čas, výchozí místo a doprava, zájmy, jídlo, rozpočet a preference, shrnutí) s animovaným ukazatelem kroků (autíčko).
+- **Výchozí místo zadáte adresou** (našeptávání během psaní, omezené na Karlovarský kraj, řazené podle blízkosti) nebo tlačítkem **Moje poloha** (GPS, k poloze se dohledá adresa). Výběr obce se nepoužívá.
+- **Doprava:** auto, kolo, pěšky. U pěší chůze jde zapnout **bezbariérovou variantu** (kočárek, vozík): pomalejší tempo, bez schodů a stoupání, bez rozhleden, hradů a lanovek.
+- **Okruh nebo jednosměrně:** u okruhu poslední úsek vždy končí ve výchozím bodě a návrat se počítá do času i kilometrů.
+- **Reálný harmonogram:** mezi zastávkami je doba přesunu podle dopravy plus **časová rezerva** (auto 5 min, kolo 3, pěšky 2; parkování, zorientování). Když dorazíte před začátkem prohlídky, plán ukáže **čekání** („Na místě budete čekat X minut před začátkem prohlídky.“) a odchod počítá až od konce prohlídky.
+- **Pořadí zastávek** se optimalizuje (nejkratší čas cesty a čekání při dodržení otevíracích dob), aby se trasa nevracela sem a tam.
+- **Dovolená** na více dní a obcí (stejný průvodce o 6 krocích), ubytování, jedna přehledná mapa se všemi dny (vybraný den očíslovaný, ostatní zeslabené).
+- **Mapa trasy po skutečných cestách**, navigace do Google Maps, Mapy.cz a Apple Map, export do kalendáře, tisk a sdílení.
+- **Ceny jsou jen vstupné** (jídlo, doprava a ubytování se nepočítají).
+- **Účty** (dobrovolné): oblíbená místa a „Moje výlety“ na všech zařízeních. Již proběhlé výlety jdou zobrazit (štítek „Proběhlo“).
+- Mapa všech míst s filtry, detail místa, kalendář akcí kraje.
+
 ## Jak to funguje
 
 1. **Import dat** – skript [`import_datazapad.py`](backend/engine/scripts/import_datazapad.py) stáhne datové sady z DataZápadu přes ArcGIS REST API a převede je na místa pro plánovač. Data nejen přebírá, ale **odvozuje z nich**, co plánovač potřebuje: **přístupnost** (nepřístupné objekty vynechá, zavřené zámky a kostely nabídne jen jako krátkou zastávku zvenku), **vstupné**, **otevírací dobu** a **sezónu** z textových poznámek, **místa uvnitř** pro deštivé dny. Místo uvedené ve více sadách (např. klášter Teplá v NKP i v náboženských památkách) uloží jen jednou. Import se spouští automaticky a opakovaně – data se aktualizují a záznamy, které z DataZápadu zmizely, se smažou.
-2. **Plánovač** ([`main.py`](backend/engine/app/main.py)) skládá trasu od výchozího bodu: vybírá vhodná místa v dosahu zvolené dopravy, počká na otevření, oběd naplánuje mezi 11:30 a 14:00, nedá víc než 3 místa stejného typu za den, u okruhu hlídá čas na návrat a podle hodinové předpovědi (Open-Meteo) upozorní na déšť nebo na přání nabídne jen místa uvnitř. Když výlet nejde naplánovat, vysvětlí proč.
+2. **Plánovač** ([`main.py`](backend/engine/app/main.py)) skládá trasu od výchozího bodu: vybírá vhodná místa v dosahu zvolené dopravy, počká na otevření, po každém přesunu přidá časovou rezervu, oběd naplánuje mezi 11:30 a 14:00, nedá víc než 3 místa stejného typu za den, u okruhu hlídá čas na návrat a podle hodinové předpovědi (Open-Meteo) upozorní na déšť nebo na přání nabídne jen místa uvnitř. Vybrané zastávky pak seřadí tak, aby byl součet cesty a čekání co nejkratší. Když výlet nejde naplánovat, vysvětlí proč.
 3. **Plánovač dovolené** rozdělí dny mezi vybrané obce (víc obcí než dní = výlet přes víc měst za den), každý den naplánuje okruh z ubytování bez opakování míst, a když v obci program dojde, přidá okolní obce. U každé obce nabídne ubytování z OpenStreetMap.
 4. **Frontend** (React) provede uživatele průvodcem pro výlet nebo dovolenou, případně nabídne hotový tematický výlet. Výsledek ukazuje časovou osu s fotkami, adresami a počasím, mapu trasy, navigaci a u každé zastávky **datovou sadu DataZápadu, ze které pochází**.
 
@@ -68,7 +82,8 @@ frontend (React, :5173) → PHP gateway (:8080) → Python engine (FastAPI, :800
 - Restaurace, kavárny a hospody pro zastávku na oběd: [OpenStreetMap](https://www.openstreetmap.org/copyright), ODbL – DataZápad z gastronomie obsahuje jen pivovary. Podniky jsou uložené zvlášť (ne mezi turistickými cíli), plánovač čte jejich otevírací dobu podle dne v týdnu a vynechává kavárny čerpacích stanic. Na mapě míst jsou jako vypínatelná vrstva.
 - Ubytování pro plánovač dovolené: [OpenStreetMap](https://www.openstreetmap.org/copyright) přes Overpass API, ODbL – hotely, penziony, apartmány, chaty a kempy (DataZápad obsahuje o ubytování jen souhrnné statistiky).
 - Předpověď počasí: [Open-Meteo](https://open-meteo.com/), CC BY 4.0.
-- Trasa na mapě po silnicích, cyklostezkách a cestách: [OSRM](https://project-osrm.org/) nad OpenStreetMap ([routing.openstreetmap.de](https://routing.openstreetmap.de/about.html), FOSSGIS). Když služba neodpoví, zobrazí se trasa vzdušnou čarou.
+- Trasa na mapě po silnicích, cyklostezkách a cestách: [OSRM](https://project-osrm.org/) nad OpenStreetMap ([routing.openstreetmap.de](https://routing.openstreetmap.de/about.html), FOSSGIS); bezbariérová chůze přes [Valhalla](https://valhalla.openstreetmap.de/) (profil wheelchair). Dotazy jdou přes náš server (`/api/route`), který si trasy pamatuje a hlídá limity veřejných služeb. Když služba neodpoví, zobrazí se trasa vzdušnou čarou.
+- Vyhledávání adres výchozího místa: [Photon](https://photon.komoot.io/) a záložně [Nominatim](https://nominatim.org/) nad daty OpenStreetMap, ODbL (`/api/geocode`, `/api/reverse`). Otevírací dobu restaurací a kaváren bere plánovač z tagu `opening_hours` v OpenStreetMap; u míst z DataZápadu se čte z textu v datech, a když tam není, použije se typická doba podle druhu místa.
 - Fotky míst: [Wikipedie](https://cs.wikipedia.org/), [Wikimedia Commons](https://commons.wikimedia.org/) a [Wikidata](https://www.wikidata.org/) – odkazujeme na náhledy, licence podle jednotlivých souborů (většinou CC BY-SA). Fotka se přiřadí jen při shodě názvu a polohy. Když tam fotka není, použije se náhledový obrázek z oficiálního webu místa uvedeného v DataZápadu – patří provozovateli webu a u fotky je uveden zdroj. Fotky prohlížeč stahuje přes náš server (`/photos`), který si je jednou uloží – Wikimedia při mnoha obrázcích najednou odpovídá 429 a fotky by se náhodně nenačítaly.
 - Kalendář akcí: odkazy do oficiálního kalendáře kraje [Kam na západě](https://kamnazapade.cz/) – data nepřebíráme, jen na kalendář odkazujeme.
 - Mapové podklady: © přispěvatelé [OpenStreetMap](https://www.openstreetmap.org/copyright), ODbL.
@@ -76,7 +91,6 @@ frontend (React, :5173) → PHP gateway (:8080) → Python engine (FastAPI, :800
 ## Použití AI
 
 - **Claude Code (Anthropic)** – návrh a implementace importu DataZápadu (čtení přístupnosti, vstupného, otevírací doby a sezóny z dat, slučování duplicit, dohledávání fotek), importu ubytování z OpenStreetMap, plánovače dovolené, napojení React frontendu na backend, map a navigace, revize kódu a opravy chyb v plánovači. Výstupy AI tým kontroloval a testoval.
-- <další nástroje AI, které tým použil, a k čemu>
 
 ## Spuštění
 
@@ -108,12 +122,14 @@ Volby importu:
 
 Vývoj frontendu bez Dockeru: `cd frontend && npm install && npm run dev`.
 
+**Po `git pull` vždy znovu sestavte obrazy:** `docker compose up -d --build`. Frontend (včetně loga a obrázků ve `frontend/public`) se do obrazu zapéká při sestavení, bez `--build` poběží stará verze. V prohlížeči pak obnovte stránku bez cache (Ctrl+F5), loga a favicon se cachují.
+
 Hesla k databázi jsou zatím uvedena přímo v `docker-compose.yml` a slouží jen pro lokální vývoj. Skutečné klíče a hesla do repozitáře nepatří, použijte `.env.example`.
 
 ## Tým
-- Oleksandr Kerestii ([@oleksandr106](https://github.com/oleksandr106)) – backend
-- Lukáš Nováček – frontend
-- Jara Bouška – opravy chyb v backendu a frontendu, prezentace
+- Oleksandr Kerestii ([@oleksandr106](https://github.com/oleksandr106)) – developer
+- Lukáš Nováček – developer
+- Jara Bouška – developer
 
 ## Licence
 Kód: [MIT](LICENSE). Ostatní obsah: CC BY 4.0.
