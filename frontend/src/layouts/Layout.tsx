@@ -33,6 +33,7 @@ export default function Layout() {
                         <nav className="flex items-center gap-6 font-medium text-sm text-white">
                             <Link to="/" className="hover:text-accent transition-colors hidden sm:block">Domů</Link>
                             <Link to="/mapa" className="hover:text-accent transition-colors hidden sm:block">Mapa míst</Link>
+                            <Link to="/akce" className="hover:text-accent transition-colors hidden md:block">Kalendář akcí</Link>
                             <Link to="/wizard" className="bg-accent text-primary-dark hover:bg-yellow-400 transition-colors px-5 py-2 rounded-full font-bold shadow-sm whitespace-nowrap">
                                 Naplánovat výlet
                             </Link>

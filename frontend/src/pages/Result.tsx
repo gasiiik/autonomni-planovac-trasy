@@ -2,13 +2,14 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import type { ItineraryItem, PlanRequest, PlanResponse } from '../types/api';
 import { generatePlan } from '../services/apiClient';
-import { CalendarPlus, Check, Clock, CloudRain, CloudSun, MapPin, Navigation, Printer, Share2, Sun } from 'lucide-react';
+import { CalendarDays, CalendarPlus, Check, Clock, CloudRain, CloudSun, ExternalLink, MapPin, Navigation, Printer, Share2, Sun } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { CATEGORY_LABELS, TRANSPORT_LABELS } from '../constants';
 import { CategoryTag, TransportIcon, WeatherIcon } from '../components/Icons';
 import { decodePlan } from '../utils/plan';
 import { downloadIcs } from '../utils/calendar';
 import { applePlaceNavUrl, appleRouteUrl, googlePlaceNavUrl, googleRouteUrl, mapyPlaceNavUrl, mapyRouteUrl, tooManyForGoogle } from '../utils/navigation';
+import { cityEventsUrl, townFromStartName, EVENTS_CALENDAR_URL } from '../utils/events';
 import RouteMap from '../components/RouteMap';
 import PlaceImage from '../components/PlaceImage';
 
@@ -286,6 +287,29 @@ export default function Result() {
                             </div>
                         </>
                     )}
+
+                    {/* Akce v obci startu - odkaz do oficiálního kalendáře kraje */}
+                    {(() => {
+                        const town = townFromStartName(result.location);
+                        const url = cityEventsUrl(town) ?? EVENTS_CALENDAR_URL;
+                        return (
+                            <a href={url} target="_blank" rel="noopener noreferrer"
+                                className="mt-8 flex items-center gap-4 p-5 rounded-2xl bg-secondary hover:bg-primary group transition print:hidden">
+                                <span className="flex items-center justify-center w-12 h-12 rounded-xl bg-white text-primary shrink-0">
+                                    <CalendarDays size={24} aria-hidden="true" />
+                                </span>
+                                <span className="flex-1">
+                                    <span className="block font-bold text-primary-dark group-hover:text-white">
+                                        {cityEventsUrl(town) ? `Co se děje v obci ${town}?` : 'Co se děje v kraji?'}
+                                    </span>
+                                    <span className="block text-sm text-gray-600 group-hover:text-white/85">
+                                        Festivaly, koncerty a další akce v kalendáři Karlovarského kraje Kam na západě
+                                    </span>
+                                </span>
+                                <ExternalLink size={18} className="text-primary group-hover:text-white shrink-0" aria-hidden="true" />
+                            </a>
+                        );
+                    })()}
 
                     <div className="mt-8 flex flex-wrap gap-4 print:hidden">
                         <Link to="/wizard" className="px-6 py-3 border border-primary text-primary font-bold rounded-full hover:bg-primary hover:text-white transition">
