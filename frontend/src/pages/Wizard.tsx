@@ -36,6 +36,7 @@ interface WizardForm {
     food_preferences: string[];
     willing_to_pay_entry: boolean;
     budget_max: string;
+    participants: string;              // počet osob - vstupné se počítá za všechny
     max_travel_time_mins: string;
     difficulty: NonNullable<PlanRequest['difficulty']>;
     has_children: boolean;
@@ -53,7 +54,7 @@ function initialForm(presetLocation: string | null): WizardForm {
             const fresh = { ...form, ...currentTimes() };
             // Výchozí místo se nepamatuje (obec ani poloha) - uživatel ho vždy vybere sám.
             // Výjimka: "Naplánovat výlet odsud" z detailu místa obec předvyplní.
-            return { ...fresh, start: null, location_id: presetLocation ?? '' };
+            return { ...fresh, participants: fresh.participants ?? '1', start: null, location_id: presetLocation ?? '' };
         }
     } catch {
         // poškozená data v session storage ignorujeme
@@ -68,6 +69,7 @@ function initialForm(presetLocation: string | null): WizardForm {
         food_preferences: [],
         willing_to_pay_entry: true,
         budget_max: '',
+        participants: '1',
         max_travel_time_mins: '',
         difficulty: 'MEDIUM',
         has_children: false,
@@ -91,6 +93,7 @@ function toPlanRequest(f: WizardForm): PlanRequest {
         food_preferences: f.gastro ? f.food_preferences : [],
         willing_to_pay_entry: f.willing_to_pay_entry,
         budget_max: f.budget_max === '' ? null : parseFloat(f.budget_max),
+        participants_count: Math.min(Math.max(parseInt(f.participants) || 1, 1), 50),
         max_travel_time_mins: f.max_travel_time_mins === '' ? null : parseInt(f.max_travel_time_mins),
         difficulty: f.difficulty,
         has_children: f.has_children,
@@ -330,9 +333,13 @@ export default function Wizard() {
                                     <option value="no">Ne, pouze zdarma</option>
                                 </select>
                             </div>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                                 <div>
-                                    <label className="block text-primary-dark mb-2">Maximální útrata (Kč)</label>
+                                    <label className="block text-primary-dark mb-2">Počet osob</label>
+                                    <input name="participants" type="number" min="1" max="50" step="1" value={formData.participants} onChange={handleChange} className={inputClass} />
+                                </div>
+                                <div>
+                                    <label className="block text-primary-dark mb-2">Max. útrata celkem (Kč)</label>
                                     <input type="number" name="budget_max" min="0" step="50" placeholder="bez omezení" value={formData.budget_max} onChange={handleChange} className={inputClass} />
                                 </div>
                                 <div>
@@ -368,6 +375,7 @@ export default function Wizard() {
                                 <p><strong>Start:</strong> {locationName ?? '–'}</p>
                                 <p><strong>Doprava:</strong> {TRANSPORT_LABELS[formData.transport_mode]}, {formData.route_type === 'LOOP' ? 'okruh' : 'jednosměrně'}</p>
                                 <p><strong>Zájmy:</strong> {formData.interests.length ? INTERESTS.filter(i => formData.interests.includes(i.value)).map(i => i.label).join(', ') : 'Překvap mě'}{formData.gastro ? ' + jídlo' : ''}</p>
+                                <p><strong>Počet osob:</strong> {formData.participants || 1}</p>
                                 <p><strong>Vstupné:</strong> {formData.willing_to_pay_entry ? 'ano' : 'jen zdarma'}{formData.budget_max ? `, max. ${formData.budget_max} Kč` : ''}</p>
                                 <p><strong>Náročnost:</strong> {DIFFICULTY_LABELS[formData.difficulty]}{formData.has_children ? ', s dětmi' : ''}</p>
                             </div>

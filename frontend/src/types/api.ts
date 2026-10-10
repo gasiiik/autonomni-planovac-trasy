@@ -19,7 +19,11 @@ export interface PlanRequest {
     participants_count?: number;
     has_children?: boolean;
     indoor_when_rain?: boolean;
-    exclude_ids?: number[];          // místa navštívená v předchozích dnech dovolené
+    exclude_ids?: number[];          // místa navštívená v předchozích dnech dovolené / vyřazená uživatelem
+    max_stops?: number | null;       // "Odebrat zastávku" - plán s menším počtem zastávek
+    max_stops_by_day?: (number | null)[];
+    only_ids?: number[] | null;
+    only_ids_by_day?: (number[] | null)[]; // dovolená: max. zastávek pro jednotlivé dny
     area_location_ids?: number[];    // dovolená: hledat i v okolí dalších obcí (automaticky přidané okolí)
     day_town_ids?: number[];         // dovolená: obce, kterými výlet ten den vede (čas dne se rozdělí)
     vacation?: VacationRequest | null; // jen frontend: plán dovolené (backend neznámá pole ignoruje)
@@ -29,6 +33,14 @@ export interface VacationRequest {
     towns: number[];       // obce v pořadí návštěvy
     days: number;          // délka dovolené ve dnech
     daily_from?: string;   // "HH:MM:SS" - od kdy se plánuje 2. a další dny
+    stays?: Record<string, ChosenStay>; // vybrané ubytování podle prvního dne pobytu (klíč = index dne)
+}
+
+export interface ChosenStay {
+    id: number;
+    name: string;
+    lat: number;
+    lng: number;
 }
 
 // Restaurace, kavárny a hospody z OpenStreetMap (vrstva na mapě míst)
@@ -142,6 +154,7 @@ export interface PlanResponse {
     remaining_free_time_mins: number;
     total_planned_time: number;
     total_estimated_cost: number;
+    participants?: number;
 }
 
 export interface DatasetInfo {

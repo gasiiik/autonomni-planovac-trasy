@@ -35,6 +35,7 @@ interface VacationForm {
     food_preferences: string[];
     willing_to_pay_entry: boolean;
     budget_max: string;                // na den
+    participants: string;              // počet osob - vstupné se počítá za všechny
     difficulty: NonNullable<PlanRequest['difficulty']>;
     has_children: boolean;
     indoor_when_rain: boolean;
@@ -46,7 +47,7 @@ function initialForm(): VacationForm {
     const tomorrow = addDays(localDate(new Date()), 1);
     const defaults: VacationForm = {
         arrival: tomorrow, departure: addDays(tomorrow, 3), pace: 'normal', towns: [], transport_mode: 'CAR',
-        interests: [], gastro: true, food_preferences: [], willing_to_pay_entry: true, budget_max: '',
+        interests: [], gastro: true, food_preferences: [], willing_to_pay_entry: true, budget_max: '', participants: '1',
         difficulty: 'MEDIUM', has_children: false, indoor_when_rain: false,
     };
     // Návrat z výsledku: předvyplníme preference, ale ne obce a termín v minulosti
@@ -84,6 +85,7 @@ function toPlanRequest(f: VacationForm): PlanRequest {
         food_preferences: f.gastro ? f.food_preferences : [],
         willing_to_pay_entry: f.willing_to_pay_entry,
         budget_max: f.budget_max === '' ? null : parseFloat(f.budget_max),
+        participants_count: Math.min(Math.max(parseInt(f.participants) || 1, 1), 50),
         difficulty: f.difficulty,
         has_children: f.has_children,
         indoor_when_rain: f.indoor_when_rain,
@@ -272,7 +274,11 @@ export default function VacationWizard() {
                     {step === 4 && (
                         <div className="space-y-6">
                             <h2 className="text-2xl font-bold text-primary-dark">S kým a za kolik?</h2>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                <div>
+                                    <label className="block text-primary-dark mb-2">Počet osob</label>
+                                    <input type="number" min="1" max="50" step="1" value={form.participants} onChange={e => update({ participants: e.target.value })} className={inputClass} />
+                                </div>
                                 <div>
                                     <label className="block text-primary-dark mb-2">Vstupné</label>
                                     <select value={form.willing_to_pay_entry ? 'yes' : 'no'} onChange={e => update({ willing_to_pay_entry: e.target.value === 'yes' })} className={inputClass}>
@@ -281,7 +287,7 @@ export default function VacationWizard() {
                                     </select>
                                 </div>
                                 <div>
-                                    <label className="block text-primary-dark mb-2">Rozpočet na vstupné za den (Kč)</label>
+                                    <label className="block text-primary-dark mb-2">Rozpočet za den, všichni (Kč)</label>
                                     <input type="number" min="0" step="50" placeholder="bez omezení" value={form.budget_max} onChange={e => update({ budget_max: e.target.value })} className={inputClass} />
                                 </div>
                             </div>
@@ -312,6 +318,7 @@ export default function VacationWizard() {
                                 <p><strong>Tempo:</strong> {PACES.find(p => p.value === form.pace)?.label} ({PACES.find(p => p.value === form.pace)?.hint})</p>
                                 <p><strong>Doprava:</strong> {TRANSPORT_LABELS[form.transport_mode]}</p>
                                 <p><strong>Zájmy:</strong> {form.interests.length ? INTERESTS.filter(i => form.interests.includes(i.value)).map(i => i.label).join(', ') : 'Překvap mě'}{form.gastro ? ' + oběd' : ''}</p>
+                                <p><strong>Počet osob:</strong> {form.participants || 1}</p>
                                 <p><strong>Vstupné:</strong> {form.willing_to_pay_entry ? 'ano' : 'jen zdarma'}{form.budget_max ? `, max. ${form.budget_max} Kč za den` : ''}</p>
                                 <p><strong>Náročnost:</strong> {DIFFICULTY_LABELS[form.difficulty]}{form.has_children ? ', s dětmi' : ''}</p>
                             </div>

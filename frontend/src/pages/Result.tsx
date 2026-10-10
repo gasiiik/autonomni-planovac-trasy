@@ -1,17 +1,18 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
-import type { ItineraryItem, PlanRequest, PlanResponse } from '../types/api';
+import { flushSync } from 'react-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import type { AccommodationOption, ChosenStay, ItineraryItem, PlanRequest, PlanResponse } from '../types/api';
 import { generatePlan } from '../services/apiClient';
-import { BedDouble, CalendarDays, CalendarPlus, Check, Clock, CloudRain, CloudSun, ExternalLink, MapPin, Navigation, Printer, Share2, Sun } from 'lucide-react';
+import { BedDouble, CalendarDays, CalendarPlus, Check, Clock, CloudRain, CloudSun, ExternalLink, MapPin, Navigation, Printer, RefreshCw, RotateCcw, Share2, Sun, Trash2 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { CATEGORY_LABELS, DAY_COLORS, TRANSPORT_LABELS } from '../constants';
 import { CategoryTag, TransportIcon, WeatherIcon } from '../components/Icons';
-import { decodePlan } from '../utils/plan';
-import { downloadIcs } from '../utils/calendar';
+import { decodePlan, encodePlan } from '../utils/plan';
+import { downloadIcs, downloadTripIcs } from '../utils/calendar';
 import { applePlaceNavUrl, appleRouteUrl, googlePlaceNavUrl, googleRouteUrl, mapyPlaceNavUrl, mapyRouteUrl, tooManyForGoogle } from '../utils/navigation';
 import { cityEventsUrl, townFromStartName, EVENTS_CALENDAR_URL } from '../utils/events';
 import { planVacation } from '../utils/vacation';
-import type { Stay, Trip } from '../utils/vacation';
+import type { Stay, Trip, TripDay } from '../utils/vacation';
 import RouteMap from '../components/RouteMap';
 import TripOverviewMap from '../components/TripOverviewMap';
 import PlaceImage from '../components/PlaceImage';
@@ -80,9 +81,16 @@ function TravelItem({ item }: { item: ItineraryItem }) {
     );
 }
 
-function PoiItem({ item, order, transport }: { item: ItineraryItem; order: number; transport: string }) {
+interface StopActions {
+    onSwap: (item: ItineraryItem) => void;
+    onRemove: (item: ItineraryItem) => void;
+}
+
+function PoiItem({ item, order, transport, people, actions }: { item: ItineraryItem; order: number; transport: string; people: number; actions: StopActions | null }) {
     const category = item.category;
-    const cost = item.estimated_cost && item.estimated_cost > 0 ? `${Math.round(item.estimated_cost)} Kč` : 'Zdarma';
+    const cost = item.estimated_cost && item.estimated_cost > 0
+        ? `${Math.round(item.estimated_cost)} Kč${people > 1 ? ` za ${people} os.` : ''}`
+        : 'Zdarma';
     return (
         <div>
             <PlaceImage src={item.image_url} alt={item.title ?? ''} category={category} className="w-full h-48 rounded-xl mb-3" />
@@ -111,6 +119,16 @@ function PoiItem({ item, order, transport }: { item: ItineraryItem; order: numbe
                 )}
                 {item.website && <a href={item.website} target="_blank" rel="noopener noreferrer" className="text-primary underline">Web místa</a>}
             </div>
+            {actions && item.poi_id != null && (
+                <div className="flex flex-wrap gap-2 mt-3 print:hidden">
+                    <button onClick={() => actions.onSwap(item)} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-primary text-primary text-sm font-semibold hover:bg-primary hover:text-white transition">
+                        <RefreshCw size={14} aria-hidden="true" /> Vyměnit za jiné místo
+                    </button>
+                    <button onClick={() => actions.onRemove(item)} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-gray-300 text-gray-600 text-sm font-semibold hover:border-red-600 hover:text-red-700 transition">
+                        <Trash2 size={14} aria-hidden="true" /> Odebrat zastávku
+                    </button>
+                </div>
+            )}
             {item.source && (
                 <p className="mt-3 pt-2 border-t border-gray-100 text-xs text-gray-500">
                     Zdroj:{' '}
@@ -125,8 +143,9 @@ function PoiItem({ item, order, transport }: { item: ItineraryItem; order: numbe
 }
 
 // Nabídka ubytování v obci (OpenStreetMap)
-function StayCard({ stay }: { stay: Stay }) {
+function StayCard({ stay, onChoose }: { stay: Stay; onChoose: (a: AccommodationOption | null) => void }) {
     const nights = stay.days;
+    const chosenId = stay.chosen?.id ?? null;
     return (
         <div className="bg-white border-2 border-accent rounded-2xl p-5 mb-4">
             <p className="font-bold text-primary-dark flex items-center gap-2 mb-1">
@@ -135,6 +154,14 @@ function StayCard({ stay }: { stay: Stay }) {
             <p className="text-sm text-gray-500 mb-3">
                 {nights} {nights === 1 ? 'noc' : nights < 5 ? 'noci' : 'nocí'} · tipy z OpenStreetMap seřazené podle vzdálenosti od centra
             </p>
+            {stay.chosen ? (
+                <p className="text-sm text-primary-dark mb-3 flex items-center gap-2">
+                    <Check size={16} className="text-primary" aria-hidden="true" />
+                    Bydlíš v: <strong>{stay.chosen.name}</strong> – výlety v obci {stay.town.name} začínají a končí tady.
+                </p>
+            ) : stay.options.length > 0 && (
+                <p className="text-sm text-gray-600 mb-3">Vyber si ubytování a dny v obci {stay.town.name} naplánujeme od něj.</p>
+            )}
             {stay.options.length === 0 ? (
                 <p className="text-sm text-gray-600">V okolí jsme ubytování nenašli – zkus{' '}
                     <a href={`https://mapy.cz/zakladni?q=${encodeURIComponent('ubytování ' + stay.town.name)}`} target="_blank" rel="noopener noreferrer" className="text-primary underline">hledání na Mapy.cz</a>.
@@ -142,7 +169,7 @@ function StayCard({ stay }: { stay: Stay }) {
             ) : (
                 <ul className="space-y-2">
                     {stay.options.map(a => (
-                        <li key={a.id} className="flex items-start justify-between gap-3 p-3 rounded-xl bg-secondary/60">
+                        <li key={a.id} className={`flex items-start justify-between gap-3 p-3 rounded-xl ${a.id === chosenId ? 'bg-primary/10 ring-2 ring-primary' : 'bg-secondary/60'}`}>
                             <div className="min-w-0">
                                 <p className="font-semibold text-primary-dark truncate">{a.name}</p>
                                 <p className="text-xs text-gray-600">
@@ -150,14 +177,73 @@ function StayCard({ stay }: { stay: Stay }) {
                                     {a.address ? ` · ${a.address}` : ''}
                                 </p>
                             </div>
-                            <div className="flex gap-3 shrink-0 text-sm font-semibold">
+                            <div className="flex flex-wrap justify-end items-center gap-x-3 gap-y-1 shrink-0 text-sm font-semibold">
                                 {a.website && <a href={a.website} target="_blank" rel="noopener noreferrer" className="text-primary underline">Web</a>}
                                 <a href={`https://mapy.cz/zakladni?q=${encodeURIComponent(a.name + ' ' + stay.town.name)}`} target="_blank" rel="noopener noreferrer" className="text-primary underline">Mapa</a>
+                                <button onClick={() => onChoose(a.id === chosenId ? null : a)}
+                                    className={`px-3 py-1 rounded-full transition print:hidden ${a.id === chosenId ? 'bg-primary text-white hover:bg-primary-dark' : 'bg-white text-primary border border-primary hover:bg-primary hover:text-white'}`}
+                                    title={a.id === chosenId ? 'Zrušit výběr' : 'Plánovat dny od tohoto ubytování'}>
+                                    {a.id === chosenId ? 'Vybráno' : 'Bydlet tady'}
+                                </button>
                             </div>
                         </li>
                     ))}
                 </ul>
             )}
+        </div>
+    );
+}
+
+// Počasí dne pro záložku: ikona z první zastávky s předpovědí a nejvyšší teplota
+function DayWeather({ plan }: { plan: PlanResponse }) {
+    const withWeather = plan.itinerary.filter(i => i.weather);
+    if (!withWeather.length) {
+        if (plan.weather_status === 'UNKNOWN') return null;
+        const Icon = WEATHER_ICONS[plan.weather_status];
+        return <Icon size={15} aria-hidden="true" />;
+    }
+    const temps = withWeather.map(i => i.weather?.temp).filter((t): t is number => t != null);
+    return (
+        <span className="inline-flex items-center gap-1 font-normal" title="Předpověď počasí">
+            <WeatherIcon code={withWeather[0].weather!.code} size={15} />
+            {temps.length > 0 && `${Math.round(Math.max(...temps))} °C`}
+        </span>
+    );
+}
+
+// Celá dovolená na papír / do PDF - všechny dny pod sebou (zobrazí se jen při tisku)
+function TripPrint({ trip, people }: { trip: Trip; people: number }) {
+    const stayOf = (d: number) => trip.stays.find(s => d >= s.firstDay && d < s.firstDay + s.days);
+    return (
+        <div className="hidden print:block text-black">
+            <h1 className="text-2xl font-bold mb-1">Dovolená · {trip.days.length} {trip.days.length === 1 ? 'den' : trip.days.length < 5 ? 'dny' : 'dní'}</h1>
+            <p className="mb-4 text-sm">
+                Bydlení: {trip.stays.map(s => `${s.town.name}${s.chosen ? ` (${s.chosen.name})` : ''}`).join(' → ')}
+                {people > 1 ? ` · ${people} osoby` : ''}
+                {' '}· vstupné celkem {Math.round(trip.days.reduce((n, d) => n + d.plan.total_estimated_cost, 0))} Kč
+            </p>
+            {trip.days.map((d: TripDay, i) => {
+                const stay = stayOf(i);
+                return (
+                    <section key={d.date} className="mb-5 break-inside-avoid">
+                        <h2 className="text-lg font-bold border-b border-gray-400 mb-1">
+                            Den {i + 1} · {new Date(d.date).toLocaleDateString('cs-CZ', { weekday: 'long', day: 'numeric', month: 'long' })} · {d.towns.map(t => t.name).join(' + ')}
+                        </h2>
+                        <p className="text-xs mb-1">Start a návrat: {stay?.chosen?.name ?? `ubytování v obci ${d.base.name}`} · {d.plan.message}</p>
+                        {d.plan.empty_reason ? <p className="text-sm">{d.plan.empty_reason}</p> : (
+                            <ol className="text-sm space-y-0.5">
+                                {d.plan.itinerary.filter(it => it.type === 'poi').map((it, k) => (
+                                    <li key={k}>
+                                        <strong>{it.start}–{it.end}</strong> {it.title}
+                                        {it.address ? `, ${it.address}` : ''}
+                                        {it.estimated_cost ? ` · ${Math.round(it.estimated_cost)} Kč` : ''}
+                                    </li>
+                                ))}
+                            </ol>
+                        )}
+                    </section>
+                );
+            })}
         </div>
     );
 }
@@ -174,12 +260,20 @@ function readRequest(params: URLSearchParams): PlanRequest | null {
     }
 }
 
+// Úprava plánu (výměna, odebrání zastávky, výběr ubytování) mění ?plan= v URL -> plán se spočítá znovu
 export default function Result() {
     const [searchParams] = useSearchParams();
+    return <ResultView key={searchParams.get('plan') ?? ''} />;
+}
+
+function ResultView() {
+    const [searchParams] = useSearchParams();
+    const navigate = useNavigate();
     const [request] = useState(() => readRequest(searchParams));
     const [single, setSingle] = useState<PlanResponse | null>(null);
     const [trip, setTrip] = useState<Trip | null>(null);       // dovolená (více dní)
-    const [activeDay, setActiveDay] = useState(0);
+    const [activeDay, setActiveDay] = useState(() => Math.max(0, parseInt(searchParams.get('day') ?? '0') || 0));
+    const [printAll, setPrintAll] = useState(false);
     const [loading, setLoading] = useState(request !== null);
     const [error, setError] = useState(request ? '' : 'Žádná data k plánování – projdi nejdřív průvodce.');
     const [activeStop, setActiveStop] = useState<number | null>(null);
@@ -189,7 +283,11 @@ export default function Result() {
         if (!request) return;
         let cancelled = false;
         const work = request.vacation?.towns?.length
-            ? planVacation(request).then(t => { if (!cancelled) setTrip(t); })
+            ? planVacation(request).then(t => {
+                if (cancelled) return;
+                setTrip(t);
+                setActiveDay(d => Math.min(d, t.days.length - 1));
+            })
             : generatePlan(request).then(res => { if (!cancelled) setSingle(res); });
         work
             .catch(err => { if (!cancelled) setError(err.message); })
@@ -222,6 +320,55 @@ export default function Result() {
         }
     };
 
+    // Nový plán = nová URL (sdílitelná), u dovolené zůstaneme na stejném dni
+    const openPlan = (next: PlanRequest) => {
+        const base = next.vacation ? '/dovolena/vysledek' : '/result';
+        navigate(`${base}?plan=${encodePlan(next)}${next.vacation ? `&day=${activeDay}` : ''}`);
+    };
+
+    const currentIds = (result?.itinerary ?? []).flatMap(i => (i.type === 'poi' && i.poi_id != null ? [i.poi_id] : []));
+    // Úprava jednoho dne dovolené (ostatní dny nechá, jak jsou nastavené)
+    const perDay = <T,>(list: (T | null)[] | undefined, value: T | null) => {
+        const out: (T | null)[] = (trip?.days ?? []).map((_, d) => list?.[d] ?? null);
+        out[activeDay] = value;
+        return out;
+    };
+    const stopActions: StopActions | null = request ? {
+        // Výměna: místo vyřadíme, počet zastávek zůstane -> plánovač doplní jiné místo
+        onSwap: item => {
+            const excluded = [...(request.exclude_ids ?? []), item.poi_id!];
+            openPlan(request.vacation
+                ? { ...request, exclude_ids: excluded, max_stops_by_day: perDay(request.max_stops_by_day, currentIds.length), only_ids_by_day: perDay(request.only_ids_by_day, null) }
+                : { ...request, exclude_ids: excluded, max_stops: currentIds.length, only_ids: null });
+        },
+        // Odebrání: plán jen ze zbylých zastávek, nic nového se nedoplní (časy se přepočítají)
+        onRemove: item => {
+            const rest = currentIds.filter(id => id !== item.poi_id);
+            if (!rest.length) return;
+            openPlan(request.vacation
+                ? { ...request, only_ids_by_day: perDay(request.only_ids_by_day, rest), max_stops_by_day: perDay(request.max_stops_by_day, null) }
+                : { ...request, only_ids: rest, max_stops: null });
+        },
+    } : null;
+    const edited = !!request && (!!request.exclude_ids?.length || request.max_stops != null || !!request.only_ids?.length
+        || !!request.max_stops_by_day?.some(n => n != null) || !!request.only_ids_by_day?.some(n => n != null));
+    const resetEdits = () => request && openPlan({ ...request, exclude_ids: [], max_stops: null, only_ids: null, max_stops_by_day: [], only_ids_by_day: [] });
+
+    const chooseStay = (stay: Stay, a: AccommodationOption | null) => {
+        if (!request?.vacation) return;
+        const stays: Record<string, ChosenStay> = { ...(request.vacation.stays ?? {}) };
+        if (a) stays[String(stay.firstDay)] = { id: a.id, name: a.name, lat: a.lat, lng: a.lng };
+        else delete stays[String(stay.firstDay)];
+        openPlan({ ...request, vacation: { ...request.vacation, stays } });
+    };
+
+    // Tisk celé dovolené: nejdřív vykreslit všechny dny, pak tisk (window.print blokuje do zavření dialogu)
+    const printTrip = () => {
+        flushSync(() => setPrintAll(true));
+        window.print();
+        setPrintAll(false);
+    };
+
     if (loading) return <LoadingScreen />;
 
     if (error) {
@@ -246,11 +393,13 @@ export default function Result() {
     const waitMins = result.itinerary.filter(i => i.type === 'wait').reduce((sum, i) => sum + i.duration_mins, 0);
     const date = tripDay?.date ?? request.time_from.slice(0, 10);
     const stay = trip?.stays.find(s => activeDay >= s.firstDay && activeDay < s.firstDay + s.days) ?? null;
+    const people = result.participants ?? request.participants_count ?? 1;
     let stopNo = 0;
 
     return (
         <div className="container mx-auto pt-28 pb-12 px-4">
-            <div className="flex flex-col lg:flex-row gap-8">
+            {trip && printAll && <TripPrint trip={trip} people={people} />}
+            <div className={`flex flex-col lg:flex-row gap-8 ${printAll ? 'print:hidden' : ''}`}>
                 {/* Itinerář */}
                 <div className="lg:w-1/2">
                     {trip && (
@@ -261,7 +410,15 @@ export default function Result() {
                             <div className="bg-primary text-white p-5 rounded-2xl mb-4 grid grid-cols-3 gap-4 text-center shadow-md">
                                 <div><p className="text-2xl font-extrabold">{trip.days.reduce((n, d) => n + d.plan.itinerary.filter(i => i.type === 'poi').length, 0)}</p><p className="text-sm text-white/80">míst celkem</p></div>
                                 <div><p className="text-2xl font-extrabold">{Math.round(trip.days.reduce((n, d) => n + d.plan.itinerary.reduce((k, i) => k + (i.distance_km ?? 0), 0), 0))} km</p><p className="text-sm text-white/80">na cestách</p></div>
-                                <div><p className="text-2xl font-extrabold">{Math.round(trip.days.reduce((n, d) => n + d.plan.total_estimated_cost, 0))} Kč</p><p className="text-sm text-white/80">vstupné celkem</p></div>
+                                <div><p className="text-2xl font-extrabold">{Math.round(trip.days.reduce((n, d) => n + d.plan.total_estimated_cost, 0))} Kč</p><p className="text-sm text-white/80">vstupné celkem{people > 1 ? ` (${people} os.)` : ''}</p></div>
+                            </div>
+                            <div className="flex flex-wrap gap-3 mb-4">
+                                <button onClick={() => downloadTripIcs(trip.days.map(d => ({ plan: d.plan, date: d.date })), trip.stays.map(s => s.town.name).join(', '))} className={ACTION_BTN}>
+                                    <CalendarPlus size={18} aria-hidden="true" /> Celá dovolená do kalendáře
+                                </button>
+                                <button onClick={printTrip} className={ACTION_BTN}>
+                                    <Printer size={18} aria-hidden="true" /> Celá dovolená do PDF / tisk
+                                </button>
                             </div>
                             <div className="h-72 rounded-2xl overflow-hidden border border-secondary mb-2 relative z-0">
                                 <TripOverviewMap days={overviewDays} onSelectDay={d => { setActiveDay(d); setActiveStop(null); }} />
@@ -274,6 +431,7 @@ export default function Result() {
                                         className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-semibold transition ${i === activeDay ? 'bg-primary text-white' : 'bg-secondary text-primary-dark hover:bg-primary/20'}`}>
                                         <span className="w-2.5 h-2.5 rounded-full" style={{ background: DAY_COLORS[i % DAY_COLORS.length] }} />
                                         Den {i + 1} · {new Date(d.date).toLocaleDateString('cs-CZ', { weekday: 'short', day: 'numeric', month: 'numeric' })}
+                                        <DayWeather plan={d.plan} />
                                     </button>
                                 ))}
                             </div>
@@ -288,13 +446,13 @@ export default function Result() {
                             V {tripDay.towns.length > 1 ? 'vybraných obcích' : `obci ${tripDay.base.name}`} už program došel, proto jsme přidali i okolí: {tripDay.nearby.map(t => t.name).join(', ')}.
                         </p>
                     )}
-                    {tripDay && <p className="text-sm text-gray-500 mb-4">Start a návrat: ubytování v obci {tripDay.base.name}</p>}
+                    {tripDay && <p className="text-sm text-gray-500 mb-4">Start a návrat: {stay?.chosen ? stay.chosen.name : `ubytování v obci ${tripDay.base.name}`}</p>}
 
-                    {stay && stay.firstDay === activeDay && <StayCard stay={stay} />}
+                    {stay && stay.firstDay === activeDay && <StayCard stay={stay} onChoose={a => chooseStay(stay, a)} />}
                     {stay && stay.firstDay !== activeDay && (
                         <p className="text-sm text-gray-600 mb-4 flex items-center gap-2">
                             <BedDouble size={16} className="text-primary" aria-hidden="true" />
-                            Bydlíš dál v obci {stay.town.name} – ubytování najdeš u dne {stay.firstDay + 1}.
+                            Bydlíš dál v obci {stay.town.name}{stay.chosen ? ` (${stay.chosen.name})` : ''} – ubytování {stay.chosen ? 'změníš' : 'vybereš'} u dne {stay.firstDay + 1}.
                         </p>
                     )}
 
@@ -316,7 +474,7 @@ export default function Result() {
                                 <div><p className="text-2xl font-extrabold">{stops.length}</p><p className="text-sm text-white/80">zastávek</p></div>
                                 <div><p className="text-2xl font-extrabold">{Math.round(totalKm)} km</p><p className="text-sm text-white/80">celkem</p></div>
                                 <div><p className="text-2xl font-extrabold">{formatMins(result.total_planned_time - waitMins)}</p><p className="text-sm text-white/80">naplánováno</p></div>
-                                <div><p className="text-2xl font-extrabold">{Math.round(result.total_estimated_cost)} Kč</p><p className="text-sm text-white/80">odhad nákladů</p></div>
+                                <div><p className="text-2xl font-extrabold">{Math.round(result.total_estimated_cost)} Kč</p><p className="text-sm text-white/80">{people > 1 ? `odhad za ${people} os.` : 'odhad nákladů'}</p></div>
                             </div>
                             {result.remaining_free_time_mins > 0 && (
                                 <p className="text-sm text-gray-500 mb-6" title="Čas, který zbyl do konce zvoleného okna – další místo se do něj už nevešlo">
@@ -349,8 +507,13 @@ export default function Result() {
                                     <CalendarPlus size={18} aria-hidden="true" /> Do kalendáře
                                 </button>
                                 <button onClick={() => window.print()} className={ACTION_BTN}>
-                                    <Printer size={18} aria-hidden="true" /> Tisk
+                                    <Printer size={18} aria-hidden="true" /> {trip ? 'Tisk dne' : 'Tisk / PDF'}
                                 </button>
+                                {edited && (
+                                    <button onClick={resetEdits} className="inline-flex items-center gap-2 px-5 py-2 rounded-full border border-primary text-primary font-semibold hover:bg-primary hover:text-white transition">
+                                        <RotateCcw size={18} aria-hidden="true" /> Obnovit původní plán
+                                    </button>
+                                )}
                             </div>
 
                             <div className="relative border-l-2 border-primary/40 ml-4 pl-8 space-y-4">
@@ -372,7 +535,7 @@ export default function Result() {
                                                     <span className={isPoi ? 'font-bold text-primary-dark' : 'text-sm text-gray-500'}>{item.start} – {item.end}</span>
                                                     <span className={isPoi ? 'text-sm bg-secondary text-primary-dark px-2 py-1 rounded' : 'text-xs text-gray-400'}>{formatMins(item.duration_mins)}</span>
                                                 </div>
-                                                {isPoi ? <PoiItem item={item} order={n} transport={request.transport_mode} /> : <TravelItem item={item} />}
+                                                {isPoi ? <PoiItem item={item} order={n} transport={request.transport_mode} people={people} actions={stopActions} /> : <TravelItem item={item} />}
                                             </div>
                                         </div>
                                     );

@@ -102,7 +102,9 @@ class PlanRequest(BaseModel):
     difficulty: Optional[str] = "EASY"
     participants_count: Optional[int] = 1
     has_children: Optional[bool] = False
-    exclude_ids: Optional[List[int]] = []  # místa navštívená v předchozích dnech dovolené
+    exclude_ids: Optional[List[int]] = []  # místa navštívená v předchozích dnech dovolené / vyřazená uživatelem
+    max_stops: Optional[int] = None        # "Vyměnit za jiné místo" = stejný počet zastávek jako předtím
+    only_ids: Optional[List[int]] = None   # "Odebrat zastávku" = plán jen ze zbylých zastávek (nic nového nepřibude)
     area_location_ids: Optional[List[int]] = []  # dovolená: hledat i v okolí dalších obcí (automaticky přidané okolí)
     day_town_ids: Optional[List[int]] = []       # dovolená: další obce, kterými výlet ten den vede (čas dne se rozdělí)
     indoor_when_rain: Optional[bool] = False # při dešti jen místa uvnitř (volba uživatele)
@@ -301,13 +303,23 @@ def generate_plan(req: PlanRequest, db: Session = Depends(get_db)):
     def town_centers(ids):
         found = {l.id: (l.lat, l.lng) for l in db.query(Location).filter(Location.id.in_(ids)).all()} if ids else {}
         return [found[i] for i in ids if i in found]  # v pořadí, jak je uživatel vybral
-    day_towns = [(loc.lat, loc.lng)] + town_centers(req.day_town_ids or [])
+    # Dovolená s vybraným ubytováním: trasa začíná u hotelu (start_lat/lng), ale "první obec dne"
+    # je pořád střed obce location_id - podle něj se hledají místa a dělí čas dne
+    first_center = (loc.lat, loc.lng)
+    if req.start_lat is not None and req.location_id:
+        town = db.query(Location).filter(Location.id == req.location_id).first()
+        if town:
+            first_center = (town.lat, town.lng)
+    day_towns = [first_center] + town_centers(req.day_town_ids or [])
     centers = day_towns + town_centers(req.area_location_ids or [])
+    only = set(req.only_ids) if req.only_ids else None
     pois = [p for p in candidates
-            if p.id not in excluded and any(haversine_distance(c[0], c[1], p.lat, p.lng) <= radius_km for c in centers)]
+            if p.id not in excluded and (p.id in only if only is not None
+                                         else any(haversine_distance(c[0], c[1], p.lat, p.lng) <= radius_km for c in centers))]
     # Jídlo: DataZápad má jen pivovary -> doplníme restaurace a kavárny z OpenStreetMap
     if "GASTRO" in req.interests:
-        pois += restaurants_nearby(db, centers, radius_km, t_from, excluded, pois)
+        food = restaurants_nearby(db, centers, 1000 if only is not None else radius_km, t_from, excluded, pois)
+        pois += [f for f in food if only is None or f.id in only]
 
     # Sezónní místa (lanová centra, koupaliště, rozhledny) mimo sezónu vyřadíme
     out_of_season = [p for p in pois if not in_season(p, t_from)]
@@ -345,7 +357,8 @@ def generate_plan(req: PlanRequest, db: Session = Depends(get_db)):
 
     waypoints_for_map = [{"lat": start_lat, "lng": start_lng, "name": loc.name, "type": "START"}]
     itinerary = []
-    total_estimated_cost = 0.0 # NOVÉ
+    total_estimated_cost = 0.0 # vstupné a útrata za celou skupinu
+    people = max(1, min(req.participants_count or 1, 50))
     total_travel_time = 0 # NOVÉ pro limit cestování
     skip_reasons = set() # Důvody, proč byla místa vyřazena (pro srozumitelnou hlášku)
     last_category = None
@@ -354,7 +367,7 @@ def generate_plan(req: PlanRequest, db: Session = Depends(get_db)):
     last_meal_end = None # konec posledního jídla - další gastro zastávka nejdřív za 3 hodiny
     type_counts = {} # kolik míst daného typu už v plánu je
 
-    while unvisited:
+    while unvisited and (req.max_stops is None or len(waypoints_for_map) - 1 < req.max_stops):
         # Najdi nejbližší památku k aktuální poloze
         closest_poi = None
         min_dist = float('inf')
@@ -398,7 +411,7 @@ def generate_plan(req: PlanRequest, db: Session = Depends(get_db)):
                 continue
 
             # 3. Zohlednění nových SOČ parametrů
-            price = p.price_estimated or 0
+            price = (p.price_estimated or 0) * people  # vstupné za všechny účastníky
             # a) Peníze
             # "Jen zdarma" se týká vstupného, ne jídla
             if not req.willing_to_pay_entry and price > 0 and p.category != "GASTRO":
@@ -547,9 +560,9 @@ def generate_plan(req: PlanRequest, db: Session = Depends(get_db)):
                 "weather": forecast.get(current_time.hour), # předpověď na začátek návštěvy
                 "poi_id": poi.id,
                 "indoor": bool(poi.indoor),
-                "estimated_cost": poi.price_estimated or 0 # NOVÉ
+                "estimated_cost": (poi.price_estimated or 0) * people
             })
-            total_estimated_cost += poi.price_estimated or 0 # NOVÉ
+            total_estimated_cost += (poi.price_estimated or 0) * people
 
             waypoints_for_map.append({"lat": poi.lat, "lng": poi.lng, "name": poi.name, "type": "POI"})
 
@@ -608,5 +621,6 @@ def generate_plan(req: PlanRequest, db: Session = Depends(get_db)):
         "itinerary": itinerary,
         "remaining_free_time_mins": remaining_mins,
         "total_planned_time": total_mins - remaining_mins,
-        "total_estimated_cost": total_estimated_cost # NOVÉ
+        "total_estimated_cost": total_estimated_cost,
+        "participants": people
     }

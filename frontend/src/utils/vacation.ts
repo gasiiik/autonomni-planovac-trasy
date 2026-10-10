@@ -1,4 +1,4 @@
-import type { AccommodationOption, Location, PlanRequest, PlanResponse } from '../types/api';
+import type { AccommodationOption, ChosenStay, Location, PlanRequest, PlanResponse } from '../types/api';
 import { fetchAccommodation, fetchLocations, generatePlan } from '../services/apiClient';
 import { localDate } from './plan';
 
@@ -20,6 +20,7 @@ export interface Stay {
     firstDay: number;      // index dne, kdy do obce přijedeme
     days: number;          // kolik dní v obci bydlíme (= počet nocí)
     options: AccommodationOption[];
+    chosen: ChosenStay | null;      // ubytování vybrané uživatelem (dny se plánují od něj)
 }
 
 export interface Trip {
@@ -76,29 +77,46 @@ export async function planVacation(req: PlanRequest): Promise<Trip> {
     const startDate = req.time_from.slice(0, 10);
     const dailyFrom = vacation.daily_from ?? '09:00:00';
 
+    // Ubytování: jedno pro každý úsek dovolené se stejnou obcí, kde se spí (první obec dne).
+    // Počítá se předem, aby se dny mohly plánovat od vybraného hotelu.
+    const stays: Stay[] = [];
+    groups.forEach((group, d) => {
+        const town = byId.get(group[0]);
+        if (!town) throw new Error('Vybraná obec už neexistuje – uprav prosím dovolenou.');
+        const last = stays[stays.length - 1];
+        if (last && last.town.id === town.id) last.days++;
+        else stays.push({ town, firstDay: d, days: 1, options: [], chosen: vacation.stays?.[String(d)] ?? null });
+    });
+    const stayOfDay = (d: number) => stays.find(s => d >= s.firstDay && d < s.firstDay + s.days)!;
+
     const days: TripDay[] = [];
-    const visited: number[] = [];
+    const visited: number[] = [...(req.exclude_ids ?? [])]; // + místa vyřazená uživatelem ("Vyměnit")
     for (let d = 0; d < groups.length; d++) {
         const towns = groups[d].map(id => byId.get(id)).filter((l): l is Location => !!l);
-        if (towns.length === 0) throw new Error('Vybraná obec už neexistuje – uprav prosím dovolenou.');
         const base = towns[0];
+        const stay = stayOfDay(d);
         const date = addDays(startDate, d);
         // První den může začínat "teď", další dny ráno podle zadání
         const from = d === 0 ? req.time_from.slice(11) : dailyFrom;
         const dayRequest = (nearbyTowns: Location[]): PlanRequest => ({
             ...req,
             location_id: base.id,
+            // Vybrané ubytování: výlet začíná a končí u něj
+            ...(stay.chosen ? { start_lat: stay.chosen.lat, start_lng: stay.chosen.lng, start_name: stay.chosen.name } : {}),
             day_town_ids: towns.slice(1).map(l => l.id),       // obce dne - čas se mezi ně rozdělí
             area_location_ids: nearbyTowns.map(l => l.id),     // okolí přidané navíc
             route_type: 'LOOP',
             time_from: `${date} ${from}`,
             time_to: `${date} ${req.time_to.slice(11)}`,
             exclude_ids: visited,
+            max_stops: req.max_stops_by_day?.[d] ?? null,      // "Vyměnit" - počet zastávek dne zůstane
+            only_ids: req.only_ids_by_day?.[d] ?? null,        // "Odebrat" - den jen ze zbylých zastávek
         });
 
         let nearby: Location[] = [];
         let plan = await generatePlan(dayRequest([]));
-        if (stopCount(plan) < MIN_STOPS || plan.remaining_free_time_mins > MAX_FREE_MINS) {
+        const limited = req.max_stops_by_day?.[d] != null || req.only_ids_by_day?.[d] != null;
+        if (!limited && (stopCount(plan) < MIN_STOPS || plan.remaining_free_time_mins > MAX_FREE_MINS)) {
             // Ve vybraných obcích místa došla -> přidáme nejbližší okolní obce
             nearby = locations
                 .filter(l => !towns.some(t => t.id === l.id) && distanceKm(base, l) <= NEARBY_KM)
@@ -114,16 +132,9 @@ export async function planVacation(req: PlanRequest): Promise<Trip> {
         visited.push(...plan.itinerary.flatMap(i => (i.type === 'poi' && i.poi_id ? [i.poi_id] : [])));
     }
 
-    // Ubytování: jedno pro každý úsek dovolené se stejnou obcí, kde se spí
-    const stays: Stay[] = [];
-    days.forEach((day, d) => {
-        const last = stays[stays.length - 1];
-        if (last && last.town.id === day.base.id) last.days++;
-        else stays.push({ town: day.base, firstDay: d, days: 1, options: [] });
-    });
     await Promise.all(stays.map(async s => {
         try {
-            s.options = await fetchAccommodation(s.town.lat, s.town.lng, 4);
+            s.options = await fetchAccommodation(s.town.lat, s.town.lng, 5);
         } catch {
             s.options = [];
         }
