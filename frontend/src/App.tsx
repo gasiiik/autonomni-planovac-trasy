@@ -1,9 +1,8 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Navigate, Routes, Route } from 'react-router-dom';
 import Layout from './layouts/Layout';
 import Home from './pages/Home';
 import Wizard from './pages/Wizard';
 import Result from './pages/Result';
-import About from './pages/About';
 import MapPage from './pages/MapPage';
 import PlaceDetail from './pages/PlaceDetail';
 
@@ -15,9 +14,10 @@ function App() {
           <Route index element={<Home />} />
           <Route path="wizard" element={<Wizard />} />
           <Route path="result" element={<Result />} />
-          <Route path="o-datech" element={<About />} />
           <Route path="mapa" element={<MapPage />} />
           <Route path="misto/:id" element={<PlaceDetail />} />
+          {/* Neexistující adresa (např. zrušená /o-datech) -> úvodní stránka */}
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>
     </BrowserRouter>

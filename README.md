@@ -6,7 +6,7 @@ KrušnoPlán sestaví celodenní výlet na míru: zadáte datum, časové okno, 
 
 1. **Import dat** – skript [`import_datazapad.py`](backend/engine/scripts/import_datazapad.py) stáhne datové sady z DataZápadu přes ArcGIS REST API a převede je na místa pro plánovač. Z dat čte polohu, popis, adresu, web, **přístupnost** (nepřístupné objekty vynechá, zavřené zámky a kostely nabídne jen jako krátkou zastávku zvenku), **vstupné**, **otevírací dobu** a **sezónu** (koupaliště, lanová centra, rozhledny). Místo uvedené ve více sadách (např. klášter Teplá v NKP i v náboženských památkách) uloží jen jednou. Import lze spouštět opakovaně – data se aktualizují a záznamy, které z DataZápadu zmizely, se smažou.
 2. **Plánovač** ([`main.py`](backend/engine/app/main.py)) skládá trasu od výchozího bodu: vybírá nejbližší vhodné místo, počká na otevření (max. 60 min), oběd naplánuje mezi 11:30 a 14:00, nedá víc než 3 místa stejného typu za den, u okruhu hlídá čas na návrat a při dešti (předpověď Open-Meteo) upřednostní vnitřní aktivity. Když výlet nejde naplánovat, vysvětlí proč.
-3. **Frontend** (React) provede uživatele průvodcem nebo nabídne tematický výlet na jedno kliknutí. Výsledek zobrazí jako časovou osu s fotkami, adresami, předpovědí počasí u každé zastávky a mapou trasy; plán jde sdílet odkazem, uložit do kalendáře (.ics) nebo vytisknout a ke každé zastávce otevřít navigaci v Mapy.cz. **Mapa míst** ukazuje všechna místa z dat s filtry a každé místo má vlastní stránku s detailem. U každé zastávky uvádí datovou sadu DataZápadu, ze které pochází, a stránka **O datech** ukazuje, kolik míst z které sady aplikace používá a kdy proběhla poslední aktualizace.
+3. **Frontend** (React) provede uživatele průvodcem nebo nabídne tematický výlet na jedno kliknutí. Výsledek zobrazí jako časovou osu s fotkami, adresami, předpovědí počasí u každé zastávky a mapou trasy; plán jde sdílet odkazem, uložit do kalendáře (.ics) nebo vytisknout a ke každé zastávce otevřít navigaci v Mapy.cz. **Mapa míst** ukazuje všechna místa z dat s filtry a každé místo má vlastní stránku s detailem. U každé zastávky uvádí datovou sadu DataZápadu, ze které pochází.
 
 ```
 frontend (React, :5173) → PHP gateway (:8080) → Python engine (FastAPI, :8000) → MariaDB
@@ -64,7 +64,7 @@ cd backend
 docker compose up -d --build
 ```
 
-Data z DataZápadu se stáhnou **automaticky** při startu enginu – při prvním spuštění (cca 10 minut včetně fotek) a pak vždy, když jsou starší než 7 dní (`AUTO_IMPORT_MAX_AGE_DAYS` v `docker-compose.yml`, vypnutí `AUTO_IMPORT=0`). Aplikace mezitím běží, průběh uvidíte v `docker compose logs -f python_engine` a na stránce **O datech**.
+Data z DataZápadu se stáhnou **automaticky** při startu enginu – při prvním spuštění (cca 10 minut včetně fotek) a pak vždy, když jsou starší než 7 dní (`AUTO_IMPORT_MAX_AGE_DAYS` v `docker-compose.yml`, vypnutí `AUTO_IMPORT=0`). Aplikace mezitím běží, průběh uvidíte v `docker compose logs -f python_engine`.
 
 Ruční spuštění importu:
 ```bash
