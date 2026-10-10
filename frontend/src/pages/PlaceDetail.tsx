@@ -8,6 +8,7 @@ import { ArrowLeft, MapPin } from 'lucide-react';
 import { CATEGORY_COLORS, CATEGORY_LABELS, DIFFICULTY_LABELS, MONTHS } from '../constants';
 import { CategoryTag } from '../components/Icons';
 import PlaceImage from '../components/PlaceImage';
+import { illustrationFor } from '../utils/illustrations';
 import FavoriteButton from '../components/FavoriteButton';
 import { applePlaceNavUrl, googlePlaceNavUrl, mapyPlaceNavUrl } from '../utils/navigation';
 
@@ -67,7 +68,7 @@ export default function PlaceDetail() {
             <div className="mt-4 rounded-3xl overflow-hidden shadow-lg">
                 {/* Bez fotky jen nízký barevný pruh - velká plocha s ikonou působila jako chyba */}
                 <PlaceImage src={place.image_url} alt={place.name} category={place.category}
-                    className={place.image_url ? 'w-full h-64 md:h-96' : 'w-full h-28 md:h-32'} />
+                    className={place.image_url || illustrationFor(place.name, place.category) ? 'w-full h-64 md:h-96' : 'w-full h-28 md:h-32'} />
             </div>
 
             <div className="flex flex-col lg:flex-row gap-8 mt-8">
