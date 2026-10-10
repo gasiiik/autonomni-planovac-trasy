@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import L from 'leaflet';
+import { DAY_COLORS } from '../constants';
 import 'leaflet/dist/leaflet.css';
 import type { Waypoint } from '../types/api';
 
@@ -26,7 +27,38 @@ const escapeHtml = (s: string) => s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<
 // Trasa po skutečných cestách: OSRM nad OpenStreetMap (FOSSGIS) - auto, kolo i pěšky
 const ROUTING_PROFILE: Record<string, string> = { CAR: 'routed-car', BIKE: 'routed-bike', WALK: 'routed-foot' };
 
-async function fetchRoadRoute(points: L.LatLng[], transport: string, signal: AbortSignal): Promise<L.LatLng[] | null> {
+// Bezbariérová chůze (kočárek, vozík): Valhalla s profilem "wheelchair" - vyhýbá se schodům a prudkým stoupáním
+function decodePolyline6(str: string): L.LatLng[] {
+    const out: L.LatLng[] = [];
+    let i = 0, lat = 0, lng = 0;
+    while (i < str.length) {
+        for (const axis of [0, 1]) {
+            let shift = 0, result = 0, byte: number;
+            do { byte = str.charCodeAt(i++) - 63; result |= (byte & 0x1f) << shift; shift += 5; } while (byte >= 0x20);
+            const delta = result & 1 ? ~(result >> 1) : result >> 1;
+            if (axis === 0) lat += delta; else lng += delta;
+        }
+        out.push(L.latLng(lat / 1e6, lng / 1e6));
+    }
+    return out;
+}
+
+async function fetchWheelchairRoute(points: L.LatLng[], signal: AbortSignal): Promise<L.LatLng[] | null> {
+    const body = {
+        locations: points.map(p => ({ lat: p.lat, lon: p.lng })),
+        costing: 'pedestrian',
+        costing_options: { pedestrian: { type: 'wheelchair', step_penalty: 1000, use_hills: 0.1, max_grade: 6 } },
+    };
+    const res = await fetch('https://valhalla1.openstreetmap.de/route', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal,
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const legs: { shape: string }[] = data.trip?.legs ?? [];
+    return legs.length ? legs.flatMap(l => decodePolyline6(l.shape)) : null;
+}
+
+async function fetchOsrmRoute(points: L.LatLng[], transport: string, signal: AbortSignal): Promise<L.LatLng[] | null> {
     const profile = ROUTING_PROFILE[transport] ?? 'routed-car';
     const coords = points.map(p => `${p.lng.toFixed(5)},${p.lat.toFixed(5)}`).join(';');
     const res = await fetch(`https://routing.openstreetmap.de/${profile}/route/v1/driving/${coords}?overview=full&geometries=geojson`, { signal });
@@ -36,20 +68,41 @@ async function fetchRoadRoute(points: L.LatLng[], transport: string, signal: Abo
     return data.code === 'Ok' && line?.length ? line.map(([lng, lat]) => L.latLng(lat, lng)) : null;
 }
 
+// Trasa se hledá po úsecích (zastávka -> zastávka): když se jeden úsek nepodaří (např. bod mimo cesty), nahradí ho jen
+// vzdušná čára a zbytek trasy - včetně návratu do výchozího bodu - zůstane po cestách
+async function fetchRoadRoute(points: L.LatLng[], transport: string, wheelchair: boolean, signal: AbortSignal): Promise<{ line: L.LatLng[]; failed: number } | null> {
+    if (points.length < 2) return null;
+    const route = (pair: L.LatLng[]) => (wheelchair ? fetchWheelchairRoute(pair, signal) : fetchOsrmRoute(pair, transport, signal))
+        .catch(err => { if (signal.aborted) throw err; return null; });
+    // Nejdřív celá trasa jedním dotazem (rychlé, šetří veřejné služby); až když selže, po úsecích
+    const whole = await route(points);
+    if (whole) return { line: whole, failed: 0 };
+    const segments: (L.LatLng[] | null)[] = [];
+    for (let i = 1; i < points.length; i++) segments.push(await route([points[i - 1], points[i]]));
+    const failed = segments.filter(seg => !seg).length;
+    if (failed === segments.length) return null;
+    return { line: segments.flatMap((seg, i) => seg ?? [points[i], points[i + 1]]), failed };
+}
+
 interface Props {
     waypoints: Waypoint[];
+    wheelchair?: boolean;                     // bezbariérová chůze - trasa bez schodů a prudkých stoupání
     transport?: string;                       // CAR / BIKE / WALK - podle toho trasa po silnicích, cyklostezkách nebo cestách
+    otherDays?: { day: number; waypoints: Waypoint[] }[];   // dovolená: ostatní dny ve stejné mapě (barevně, zeslabené)
+    onSelectDay?: (day: number) => void;                     // klik na trasu / bod jiného dne
     activeStop?: number | null;               // číslo zastávky zvýrazněné v seznamu
     onSelectStop?: (stop: number) => void;    // klik na značku -> posun seznamu na zastávku
 }
 
-export default function RouteMap({ waypoints, transport = 'CAR', activeStop = null, onSelectStop }: Props) {
+export default function RouteMap({ waypoints, transport = 'CAR', wheelchair = false, otherDays = [], onSelectDay, activeStop = null, onSelectStop }: Props) {
     const containerRef = useRef<HTMLDivElement>(null);
     const mapRef = useRef<L.Map | null>(null);
     const markersRef = useRef<Map<number, L.Marker>>(new Map());
     const onSelectRef = useRef(onSelectStop);
+    const onDayRef = useRef(onSelectDay);
 
     useEffect(() => { onSelectRef.current = onSelectStop; }, [onSelectStop]);
+    useEffect(() => { onDayRef.current = onSelectDay; }, [onSelectDay]);
 
     useEffect(() => {
         if (!containerRef.current || waypoints.length === 0) return;
@@ -60,16 +113,32 @@ export default function RouteMap({ waypoints, transport = 'CAR', activeStop = nu
         }).addTo(map);
 
         const points = waypoints.map(w => L.latLng(w.lat, w.lng));
+        // Ostatní dny dovolené: tenčí barevná trasa a body (klik otevře daný den)
+        const everything: L.LatLng[] = [...points];
+        otherDays.forEach(({ day, waypoints: wps }) => {
+            const color = DAY_COLORS[day % DAY_COLORS.length];
+            const pts = wps.map(w => L.latLng(w.lat, w.lng));
+            everything.push(...pts);
+            L.polyline(pts, { color, weight: 3, opacity: 0.55 }).bindTooltip(`Den ${day + 1}`, { sticky: true })
+                .on('click', () => onDayRef.current?.(day)).addTo(map);
+            wps.filter(w => w.type === 'POI').forEach(w => {
+                L.circleMarker([w.lat, w.lng], { radius: 5, color: '#fff', weight: 2, fillColor: color, fillOpacity: 0.9 })
+                    .bindTooltip(`Den ${day + 1}: ${escapeHtml(w.name)}`)
+                    .on('click', () => onDayRef.current?.(day)).addTo(map);
+            });
+        });
         // Nejdřív vzdušnou čarou (hned), po načtení ji nahradí trasa po skutečných cestách
         const straight = L.polyline(points, { color: '#087F78', weight: 3, opacity: 0.6, dashArray: '6 8' }).addTo(map);
         const controller = new AbortController();
-        fetchRoadRoute(points, transport, controller.signal)
+        fetchRoadRoute(points, transport, wheelchair && transport === 'WALK', controller.signal)
             .then(road => {
                 if (!road) return;
                 straight.remove();
-                L.polyline(road, { color: '#155E50', weight: 7, opacity: 0.35 }).addTo(map);   // lem
-                L.polyline(road, { color: '#087F78', weight: 4, opacity: 0.95 }).addTo(map);
-                map.attributionControl.addAttribution('Trasa: <a href="https://routing.openstreetmap.de/about.html">OSRM / FOSSGIS</a>');
+                L.polyline(road.line, { color: '#155E50', weight: 7, opacity: 0.35 }).addTo(map);   // lem
+                L.polyline(road.line, { color: '#087F78', weight: 4, opacity: 0.95 }).addTo(map);
+                map.attributionControl.addAttribution(wheelchair && transport === 'WALK'
+                    ? 'Trasa: <a href="https://valhalla.openstreetmap.de/">Valhalla / FOSSGIS</a> (bezbariérově)'
+                    : 'Trasa: <a href="https://routing.openstreetmap.de/about.html">OSRM / FOSSGIS</a>');
             })
             .catch(() => undefined);   // služba nedostupná - zůstane vzdušná čára
 
@@ -90,9 +159,9 @@ export default function RouteMap({ waypoints, transport = 'CAR', activeStop = nu
         markersRef.current = markers;
         mapRef.current = map;
 
-        map.fitBounds(L.latLngBounds(points), { padding: [40, 40], maxZoom: 15 });
+        map.fitBounds(L.latLngBounds(everything), { padding: [40, 40], maxZoom: otherDays.length ? 13 : 15 });
         return () => { controller.abort(); map.remove(); mapRef.current = null; markersRef.current = new Map(); };
-    }, [waypoints, transport]);
+    }, [waypoints, transport, wheelchair, otherDays]);
 
     // Zvýraznění zastávky, na kterou uživatel ukazuje v seznamu
     useEffect(() => {

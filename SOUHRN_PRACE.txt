@@ -1,0 +1,80 @@
+SOUHRN PRACE NA PROJEKTU (autonomni-planovac-trasy / KrusnoPlan)
+===============================================================
+
+1. OBRAZKY SE NENACITALY
+------------------------
+Pricina:
+- Databaze mela jen 11 rucnich mist bez fotek.
+- Import z DataZapadu nejdriv nekolik minut hledal fotky a zapsal data az na
+  konci, takze ho restart enginu pokazde zahodil.
+
+Oprava (backend/engine/scripts/import_datazapad.py):
+- Mista se ukladaji hned, fotky se dohledavaji po davkach po 20 a kazda davka
+  se hned zapise.
+- Metadata datovych sad se ukladaji hned (pocitadlo na uvodni strance nebylo 0).
+- Rucni mista a mista z karet hotovych vyletu maji prednost.
+- Z main.py odstraneny ladici vypisy ("DEBUG ...").
+
+Vysledek: 408 z 473 mist ma fotku, zbylych ~65 ma ikonu kategorie.
+
+
+2. ZPROVOZNENI VERZI OD KOLEGU
+------------------------------
+- Opakovany problem: kolize portu mezi starym stackem
+  "autonomni-planovac-trasy-*" a novym "backend-*". Stary stack zastaven
+  (ne smazan).
+- Brana (php_gateway) jednou bezela bez zverejneneho portu 8080, spravilo to
+  docker compose up -d --build --force-recreate php_gateway.
+- Aplikace bezi na http://localhost:5173, API na http://localhost:8080.
+- Lokalni vetev "sasa" byla jednou resetovana na kolegovu "jara" (starsi verze
+  bez mist, uctu a fotek). Prace zustala v gitu na origin/sasa.
+
+
+3. ADRESA MISTO OBCE
+--------------------
+- Engine: endpoint /internal/geocode - hleda pres Photon (OpenStreetMap),
+  zaloha Nominatim. Omezeno na Karlovarsky kraj, razeni podle polohy uzivatele,
+  doplneni obci z databaze.
+- Brana: cesta /api/geocode.
+- Frontend: komponenta AddressSearch v kroku 2 s nasepavanim behem psani
+  (bez tlacitka "Najit"). Vyber obce a "Vyrazit z me polohy" odstraneny.
+
+
+4. PLANOVAC (BACKEND)
+---------------------
+- Poradi zastavek: optimalizace (vsechna poradi do 8 zastavek, jinak nejblizsi
+  soused + 2-opt) s ohledem na oteviraci doby. Zkraceni trasy mirne
+  (napr. 10,7 -> 9,0 km).
+- Cekani pred prohlidkou: zprava "Na miste budete cekat X minut pred zacatkem
+  prohlidky." Odchod se pocita od konce prohlidky.
+- Rezerva po presunu: auto 5 min, kolo 3, pesky 2, bezbarierove 3. Jde prepsat
+  parametrem buffer_mins. V itinerari je jako samostatna polozka "buffer".
+  Presun pod 10 m se nepocita.
+- Bezbarierova chuze: parametr wheelchair_accessible, pomalejsi tempo,
+  vyrazeni rozhleden, hradu, lanovek a obtiznejsich mist.
+- Okruh: v testech (140 planu) koncil vzdy navratem do startu, chyba v enginu
+  nenalezena.
+
+
+5. FRONTEND
+-----------
+- Progress bar s autickem: pomala jizda (1,4 s), sedy kour z vyfuku, bez
+  tecek, respektuje omezeni animaci.
+- Sdilene komponenty: ChoiceCard, NumberField, TransportPicker, CarProgress.
+- Krok 2: karty pro typ trasy (okruh / jednosmerne) a bezbarierovy prepinac,
+  ktery se rozbali jen u chuze.
+- Kroky 4 a 5: zaoblene karty se stinem, hover a focus.
+- Dovolena: prepracovana na 6 kroku se stejnym vzhledem jako vylety. Ve shrnuti
+  je jedna mapa se vsemi dny, vybrany den zvyrazneny.
+- Mapa trasy: zkusi celou trasu najednou, pri neuspechu po usecich.
+  Bezbarierove trasy jdou pres Valhalla.
+
+
+STAV A OTEVRENE VECI
+--------------------
+- Vsechny upravy jsou jen v pracovnim strome, NIC NENI ZACOMMITOVANE.
+- Frontend se vzdy prebuildil bez chyby a backend byl zkousen skripty a curl.
+  Prohlizec nebyl spousten, vzhled (auticko, kroky, mapy) je potreba posoudit
+  po Ctrl+F5.
+- Verejna doprava (MHD) v aplikaci neni.
+- Hledani adres je z OpenStreetMap, hodne rozepsane slovo nemusi vzdy najit.

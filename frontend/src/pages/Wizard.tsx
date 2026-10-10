@@ -3,10 +3,13 @@ import type { ChangeEvent, FormEvent } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import type { Category, Location, PlanRequest } from '../types/api';
 import { fetchLocations } from '../services/apiClient';
-import { Check, LocateFixed } from 'lucide-react';
+import { ArrowRight, Check, MapPin, Repeat, X } from 'lucide-react';
 import { ALL_INTERESTS, DIFFICULTY_LABELS, FOOD_PREFERENCES, INTERESTS, TRANSPORT_LABELS } from '../constants';
-import { CategoryBadge, TransportIcon } from '../components/Icons';
-import LocationPicker from '../components/LocationPicker';
+import { CategoryBadge } from '../components/Icons';
+import AddressSearch from '../components/AddressSearch';
+import CarProgress from '../components/CarProgress';
+import TransportPicker from '../components/TransportPicker';
+import { ChoiceCard, NumberField } from '../components/FormControls';
 import { currentTimes, localDate, normalizeTimes, nowRounded, resultUrl } from '../utils/plan';
 
 const STEPS = 6;
@@ -40,6 +43,7 @@ interface WizardForm {
     max_travel_time_mins: string;
     difficulty: NonNullable<PlanRequest['difficulty']>;
     has_children: boolean;
+    wheelchair_accessible: boolean;
     indoor_when_rain: boolean;
 }
 
@@ -54,7 +58,7 @@ function initialForm(presetLocation: string | null): WizardForm {
             const fresh = { ...form, ...currentTimes() };
             // Výchozí místo se nepamatuje (obec ani poloha) - uživatel ho vždy vybere sám.
             // Výjimka: "Naplánovat výlet odsud" z detailu místa obec předvyplní.
-            return { ...fresh, participants: fresh.participants ?? '1', start: null, location_id: presetLocation ?? '' };
+            return { ...fresh, wheelchair_accessible: fresh.wheelchair_accessible ?? false, participants: fresh.participants ?? '1', start: null, location_id: presetLocation ?? '' };
         }
     } catch {
         // poškozená data v session storage ignorujeme
@@ -73,6 +77,7 @@ function initialForm(presetLocation: string | null): WizardForm {
         max_travel_time_mins: '',
         difficulty: 'MEDIUM',
         has_children: false,
+        wheelchair_accessible: false,
         indoor_when_rain: false,
         start: null,
     };
@@ -97,6 +102,7 @@ function toPlanRequest(f: WizardForm): PlanRequest {
         max_travel_time_mins: f.max_travel_time_mins === '' ? null : parseInt(f.max_travel_time_mins),
         difficulty: f.difficulty,
         has_children: f.has_children,
+        wheelchair_accessible: f.transport_mode === 'WALK' && f.wheelchair_accessible,
         indoor_when_rain: f.indoor_when_rain ?? false,
     };
 }
@@ -109,33 +115,28 @@ export default function Wizard() {
     const [locationsError, setLocationsError] = useState('');
     const [stepError, setStepError] = useState('');
     const [formData, setFormData] = useState<WizardForm>(() => initialForm(searchParams.get('location')));
-    const [locating, setLocating] = useState(false);
 
-    // "Vyrazit z mé polohy" - poloha z prohlížeče, název podle nejbližší obce
-    const useMyLocation = () => {
+    // Výchozí místo zadané adresou - kontrola, že leží v Karlovarském kraji (jako u polohy)
+    const pickAddress = (a: { name: string; lat: number; lng: number }) => {
         setStepError('');
-        if (!navigator.geolocation) return setStepError('Prohlížeč neumí zjistit polohu – vyber prosím obec.');
-        setLocating(true);
-        navigator.geolocation.getCurrentPosition(pos => {
-            setLocating(false);
-            const here = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-            const nearest = [...locations].sort((a, b) => distanceKm(here, a) - distanceKm(here, b))[0];
-            if (nearest && distanceKm(here, nearest) > 40) {
-                return setStepError('Jsi mimo Karlovarský kraj – KrušnoPlán plánuje výlety po kraji. Vyber prosím výchozí obec.');
-            }
-            const name = nearest ? `Vaše poloha (u obce ${nearest.name})` : 'Vaše poloha';
-            setFormData(prev => ({ ...prev, start: { ...here, name }, location_id: '' }));
-        }, err => {
-            setLocating(false);
-            setStepError(err.code === err.PERMISSION_DENIED
-                ? 'Přístup k poloze je zakázaný – povol ho v prohlížeči, nebo vyber obec.'
-                : 'Polohu se nepodařilo zjistit – vyber prosím obec.');
-        }, { enableHighAccuracy: true, timeout: 10000 });
+        const nearest = [...locations].sort((x, y) => distanceKm(a, x) - distanceKm(a, y))[0];
+        if (nearest && distanceKm(a, nearest) > 40) {
+            return setStepError('Tahle adresa je mimo Karlovarský kraj – KrušnoPlán plánuje výlety po kraji.');
+        }
+        const short = a.name.split(', ').slice(0, 3).join(', ');
+        setFormData(prev => ({ ...prev, start: { lat: a.lat, lng: a.lng, name: short }, location_id: '' }));
     };
 
     useEffect(() => {
         fetchLocations()
-            .then(setLocations)
+            .then(locs => {
+                setLocations(locs);
+                // "Naplánovat výlet odsud" z detailu místa: předvyplněná obec se změní na výchozí bod (střed obce)
+                setFormData(prev => {
+                    const town = !prev.start && prev.location_id ? locs.find(l => String(l.id) === prev.location_id) : undefined;
+                    return town ? { ...prev, start: { lat: town.lat, lng: town.lng, name: town.name }, location_id: '' } : prev;
+                });
+            })
             .catch(err => setLocationsError(err.message + ' – běží backend (docker compose up)?'));
     }, []);
 
@@ -167,7 +168,7 @@ export default function Wizard() {
             const start = new Date(`${formData.date}T${formData.time_from}`);
             if (start.getTime() < Date.now() - 15 * 60000) return 'Tento čas už proběhl – vyber pozdější čas nebo jiný den.';
         }
-        if (step === 2 && !formData.location_id && !formData.start) return 'Vyber výchozí obec, nebo použij svou polohu.';
+        if (step === 2 && !formData.start) return 'Zadej adresu výchozího místa a vyber ji ze seznamu.';
         return '';
     };
 
@@ -196,12 +197,7 @@ export default function Wizard() {
 
     return (
         <div className="container mx-auto pt-28 pb-12 px-4 max-w-3xl">
-            <div className="mb-8">
-                <p className="text-primary-dark font-medium mb-2">Krok {step} z {STEPS}</p>
-                <div className="w-full bg-secondary rounded-full h-2.5">
-                    <div className="bg-primary h-2.5 rounded-full transition-all duration-300" style={{ width: `${(step / STEPS) * 100}%` }}></div>
-                </div>
-            </div>
+            <CarProgress step={step} total={STEPS} />
 
             <div className="bg-white rounded-3xl shadow-xl shadow-primary/10 p-8 border border-secondary">
                 <form onSubmit={onSubmit}>
@@ -233,51 +229,47 @@ export default function Wizard() {
                             <h2 className="text-2xl font-bold text-primary-dark">Krok 2 – Výchozí místo a doprava</h2>
                             <div>
                                 <label className="block text-primary-dark mb-2">Výchozí místo</label>
-                                {locationsError ? (
-                                    <p className="bg-red-100 text-red-700 p-3 rounded-xl">{locationsError}</p>
+                                {locationsError && <p className="bg-red-100 text-red-700 p-3 rounded-xl mb-3">{locationsError}</p>}
+                                {formData.start ? (
+                                    <div className="flex items-center justify-between gap-3 p-3 rounded-xl border-2 border-primary bg-secondary">
+                                        <span className="flex items-center gap-2 font-semibold text-primary-dark">
+                                            <MapPin size={18} aria-hidden="true" /> {formData.start.name}
+                                        </span>
+                                        <button type="button" onClick={() => setFormData(prev => ({ ...prev, start: null }))}
+                                            className="text-gray-500 hover:text-primary-dark" aria-label="Změnit adresu">
+                                            <X size={18} />
+                                        </button>
+                                    </div>
                                 ) : (
-                                    <LocationPicker
-                                        locations={locations}
-                                        value={formData.location_id}
-                                        startName={formData.start?.name}
-                                        onSelect={id => { setStepError(''); setFormData(prev => ({ ...prev, location_id: id, start: null })); }}
-                                        onClearStart={() => setFormData(prev => ({ ...prev, start: null }))}
-                                    />
-                                )}
-                                {!formData.start && !locationsError && (
-                                    <button type="button" onClick={useMyLocation} disabled={locating || !locations.length}
-                                        title="Nepovinné – místo obce můžeš vyrazit z místa, kde právě jsi"
-                                        className="mt-3 inline-flex items-center gap-2 px-4 py-2 rounded-full border-2 border-primary text-primary font-semibold hover:bg-primary hover:text-white transition disabled:opacity-60">
-                                        <LocateFixed size={18} aria-hidden="true" /> {locating ? 'Zjišťuji polohu…' : 'Vyrazit z mé polohy'}
-                                    </button>
+                                    <AddressSearch onPick={pickAddress} />
                                 )}
                             </div>
-                            <div>
-                                <label className="block text-primary-dark mb-2">Způsob dopravy</label>
-                                <div className="grid grid-cols-3 gap-3">
-                                    {(['CAR', 'BIKE', 'WALK'] as const).map(mode => (
-                                        <label key={mode} className={`flex flex-col items-center gap-1 p-4 rounded-2xl border-2 cursor-pointer transition ${formData.transport_mode === mode ? 'border-primary bg-secondary' : 'border-gray-200 hover:border-primary'}`}>
-                                            <input type="radio" name="transport_mode" value={mode} checked={formData.transport_mode === mode} onChange={handleChange} className="sr-only" />
-                                            <TransportIcon mode={mode} size={34} className="text-primary" />
-                                            <span className="font-semibold">{TRANSPORT_LABELS[mode]}</span>
-                                        </label>
-                                    ))}
+                            <TransportPicker mode={formData.transport_mode} wheelchair={formData.wheelchair_accessible}
+                                onMode={m => { setStepError(''); setFormData(prev => ({ ...prev, transport_mode: m })); }}
+                                onWheelchair={on => setFormData(prev => ({ ...prev, wheelchair_accessible: on }))} />
+                            <fieldset>
+                                <legend className="block text-primary-dark font-semibold mb-3">Typ trasy</legend>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    {([
+                                        ['LOOP', Repeat, 'Okruh', 'Vrátíme tě zpět do výchozího bodu'],
+                                        ['ONE_WAY', ArrowRight, 'Jednosměrně', 'Trasa skončí na poslední zastávce'],
+                                    ] as const).map(([value, Icon, title, hint]) => {
+                                        const active = formData.route_type === value;
+                                        return (
+                                            <label key={value} className={`flex items-center gap-4 p-4 rounded-2xl border-2 cursor-pointer transition shadow-sm hover:shadow-md hover:border-primary focus-within:ring-2 focus-within:ring-primary focus-within:ring-offset-2 ${active ? 'border-primary bg-secondary' : 'border-gray-200 bg-white'}`}>
+                                                <input type="radio" name="route_type" value={value} checked={active} onChange={handleChange} className="sr-only" />
+                                                <span className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full transition ${active ? 'bg-primary text-white' : 'bg-secondary text-primary'}`}>
+                                                    <Icon size={24} aria-hidden="true" />
+                                                </span>
+                                                <span>
+                                                    <span className="block font-semibold text-primary-dark leading-tight">{title}</span>
+                                                    <span className="block text-sm text-gray-500 mt-0.5">{hint}</span>
+                                                </span>
+                                            </label>
+                                        );
+                                    })}
                                 </div>
-                                <p className="text-sm text-gray-500 mt-2">Pěšky hledáme do 3 km, na kole do 15 km a autem do 40 km od startu.</p>
-                            </div>
-                            <div>
-                                <label className="block text-primary-dark mb-2">Návrat</label>
-                                <div className="flex flex-wrap gap-4">
-                                    <label className="flex items-center space-x-2">
-                                        <input type="radio" name="route_type" value="LOOP" checked={formData.route_type === 'LOOP'} onChange={handleChange} className="text-primary focus:ring-primary" />
-                                        <span>Vrátit se zpět (Okruh)</span>
-                                    </label>
-                                    <label className="flex items-center space-x-2">
-                                        <input type="radio" name="route_type" value="ONE_WAY" checked={formData.route_type === 'ONE_WAY'} onChange={handleChange} className="text-primary focus:ring-primary" />
-                                        <span>Jednosměrný výlet</span>
-                                    </label>
-                                </div>
-                            </div>
+                            </fieldset>
                         </div>
                     )}
 
@@ -306,66 +298,59 @@ export default function Wizard() {
                         <div className="space-y-6">
                             <h2 className="text-2xl font-bold text-primary-dark">Krok 4 – Jídlo a pití</h2>
                             <p className="text-gray-600">Oběd naplánujeme mezi 11:30 a 14:00 a nikdy nedáme dvě jídla hned po sobě.</p>
-                            <label className="flex items-center space-x-3 p-4 border rounded-xl hover:bg-secondary cursor-pointer transition">
-                                <input type="checkbox" name="gastro" checked={formData.gastro} onChange={handleChange} className="text-primary focus:ring-primary h-5 w-5 rounded" />
-                                <span>Zahrnout zastávku na jídlo</span>
-                            </label>
+                            <ChoiceCard type="checkbox" name="gastro" checked={formData.gastro} onChange={handleChange}
+                                title="Zahrnout zastávku na jídlo" hint="Restaurace, kavárna nebo pivovar podle preferencí" />
                             {formData.gastro && (
-                                <div>
-                                    <p className="text-primary-dark mb-2">Preference (nepovinné)</p>
-                                    <div className="flex flex-wrap gap-3">
+                                <fieldset>
+                                    <legend className="block text-primary-dark font-semibold mb-3">Preference <span className="font-normal text-gray-500">(nepovinné)</span></legend>
+                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                                         {FOOD_PREFERENCES.map(pref => (
-                                            <label key={pref.value} className="flex items-center space-x-2 px-4 py-2 border rounded-full hover:bg-secondary cursor-pointer transition">
-                                                <input type="checkbox" name="food_preferences" value={pref.value} checked={formData.food_preferences.includes(pref.value)} onChange={handleChange} className="text-primary focus:ring-primary rounded" />
-                                                <span>{pref.label}</span>
-                                            </label>
+                                            <ChoiceCard key={pref.value} type="checkbox" name="food_preferences" value={pref.value}
+                                                checked={formData.food_preferences.includes(pref.value)} onChange={handleChange} title={pref.label} />
                                         ))}
                                     </div>
-                                </div>
+                                    <p className="text-sm text-gray-500 mt-3">Když nic nevybereš, nabídneme jakýkoli podnik v okolí.</p>
+                                </fieldset>
                             )}
                         </div>
                     )}
 
                     {step === 5 && (
-                        <div className="space-y-6">
+                        <div className="space-y-8">
                             <h2 className="text-2xl font-bold text-primary-dark">Krok 5 – Rozpočet a další preference</h2>
-                            <div>
-                                <label className="block text-primary-dark mb-2">Ochota platit vstupné</label>
-                                <select name="willing_to_pay_entry" value={formData.willing_to_pay_entry ? 'yes' : 'no'} onChange={handleChange} className={inputClass}>
-                                    <option value="yes">Ano, chci vidět vše</option>
-                                    <option value="no">Ne, pouze zdarma</option>
-                                </select>
-                            </div>
+
+                            <fieldset>
+                                <legend className="block text-primary-dark font-semibold mb-3">Ochota platit vstupné</legend>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    {([['yes', 'Ano, chci vidět vše', 'Plánuji i placená místa'], ['no', 'Ne, pouze zdarma', 'Jen místa bez vstupného']] as const).map(([value, title, hint]) => (
+                                        <ChoiceCard key={value} type="radio" name="willing_to_pay_entry" value={value}
+                                            checked={formData.willing_to_pay_entry === (value === 'yes')} onChange={handleChange} title={title} hint={hint} />
+                                    ))}
+                                </div>
+                            </fieldset>
+
                             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                                <div>
-                                    <label className="block text-primary-dark mb-2">Počet osob</label>
-                                    <input name="participants" type="number" min="1" max="50" step="1" value={formData.participants} onChange={handleChange} className={inputClass} />
-                                </div>
-                                <div>
-                                    <label className="block text-primary-dark mb-2">Max. útrata celkem (Kč)</label>
-                                    <input type="number" name="budget_max" min="0" step="50" placeholder="bez omezení" value={formData.budget_max} onChange={handleChange} className={inputClass} />
-                                </div>
-                                <div>
-                                    <label className="block text-primary-dark mb-2">Max. čas na cestě (min)</label>
-                                    <input type="number" name="max_travel_time_mins" min="0" step="10" placeholder="bez omezení" value={formData.max_travel_time_mins} onChange={handleChange} className={inputClass} />
-                                </div>
+                                <NumberField label="Počet osob" unit="os." name="participants" min="1" max="50" step="1" value={formData.participants} onChange={handleChange} />
+                                <NumberField label="Max. útrata celkem" unit="Kč" name="budget_max" min="0" step="50" placeholder="bez omezení" value={formData.budget_max} onChange={handleChange} />
+                                <NumberField label="Max. čas na cestě" unit="min" name="max_travel_time_mins" min="0" step="10" placeholder="bez omezení" value={formData.max_travel_time_mins} onChange={handleChange} />
                             </div>
-                            <div>
-                                <label className="block text-primary-dark mb-2">Náročnost</label>
-                                <select name="difficulty" value={formData.difficulty} onChange={handleChange} className={inputClass}>
-                                    <option value="EASY">Lehká – jen snadno dostupná místa</option>
-                                    <option value="MEDIUM">Střední – i rozhledny a lanová centra</option>
-                                    <option value="HARD">Náročná – cokoliv</option>
-                                </select>
+
+                            <fieldset>
+                                <legend className="block text-primary-dark font-semibold mb-3">Náročnost</legend>
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                    {([['EASY', 'Lehká', 'Jen snadno dostupná místa'], ['MEDIUM', 'Střední', 'I rozhledny a lanová centra'], ['HARD', 'Náročná', 'Cokoliv']] as const).map(([value, title, hint]) => (
+                                        <ChoiceCard key={value} type="radio" name="difficulty" value={value}
+                                            checked={formData.difficulty === value} onChange={handleChange} title={title} hint={hint} />
+                                    ))}
+                                </div>
+                            </fieldset>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <ChoiceCard type="checkbox" name="has_children" checked={formData.has_children} onChange={handleChange}
+                                    title="Jedu s dětmi" hint="Jen místa vhodná pro rodiny" />
+                                <ChoiceCard type="checkbox" name="indoor_when_rain" checked={formData.indoor_when_rain ?? false} onChange={handleChange}
+                                    title="Při dešti jen uvnitř" hint="Jinak plán nezměníme, jen upozorníme na déšť" />
                             </div>
-                            <label className="flex items-center space-x-3 p-4 border rounded-xl hover:bg-secondary cursor-pointer transition">
-                                <input type="checkbox" name="has_children" checked={formData.has_children} onChange={handleChange} className="text-primary focus:ring-primary h-5 w-5 rounded" />
-                                <span>Jedu s dětmi</span>
-                            </label>
-                            <label className="flex items-center space-x-3 p-4 border rounded-xl hover:bg-secondary cursor-pointer transition">
-                                <input type="checkbox" name="indoor_when_rain" checked={formData.indoor_when_rain ?? false} onChange={handleChange} className="text-primary focus:ring-primary h-5 w-5 rounded" />
-                                <span>Když bude pršet, chci jen místa uvnitř <span className="block text-sm text-gray-500">Jinak plán nezměníme, jen tě na déšť upozorníme.</span></span>
-                            </label>
                         </div>
                     )}
 
@@ -376,7 +361,7 @@ export default function Wizard() {
                                 <p><strong>Datum:</strong> {new Date(formData.date).toLocaleDateString('cs-CZ')}</p>
                                 <p><strong>Čas:</strong> {formData.time_from} – {formData.time_to}</p>
                                 <p><strong>Start:</strong> {locationName ?? '–'}</p>
-                                <p><strong>Doprava:</strong> {TRANSPORT_LABELS[formData.transport_mode]}, {formData.route_type === 'LOOP' ? 'okruh' : 'jednosměrně'}</p>
+                                <p><strong>Doprava:</strong> {TRANSPORT_LABELS[formData.transport_mode]}{formData.transport_mode === 'WALK' && formData.wheelchair_accessible ? ' (bezbariérově)' : ''}, {formData.route_type === 'LOOP' ? 'okruh' : 'jednosměrně'}</p>
                                 <p><strong>Zájmy:</strong> {formData.interests.length ? INTERESTS.filter(i => formData.interests.includes(i.value)).map(i => i.label).join(', ') : 'Překvap mě'}{formData.gastro ? ' + jídlo' : ''}</p>
                                 <p><strong>Počet osob:</strong> {formData.participants || 1}</p>
                                 <p><strong>Vstupné:</strong> {formData.willing_to_pay_entry ? 'ano' : 'jen zdarma'}{formData.budget_max ? `, max. ${formData.budget_max} Kč` : ''}</p>

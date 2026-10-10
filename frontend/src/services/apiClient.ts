@@ -22,6 +22,16 @@ export const fetchLocations = async (): Promise<Location[]> => {
     return locations.sort((a, b) => a.name.localeCompare(b.name, 'cs'));
 }
 
+export interface AddressResult { name: string; lat: number; lng: number }
+
+// Hledání adresy (OpenStreetMap) -> souřadnice pro výchozí místo; near = poloha uživatele pro řazení výsledků
+export const searchAddress = async (q: string, near?: { lat: number; lng: number } | null, signal?: AbortSignal): Promise<AddressResult[]> => {
+    const loc = near ? `&lat=${near.lat}&lng=${near.lng}` : '';
+    const res = await fetch(`${API_URL}/geocode?q=${encodeURIComponent(q)}${loc}`, { signal });
+    if (!res.ok) throw await readError(res, 'Adresu se nepodařilo vyhledat');
+    return await res.json();
+}
+
 export const fetchDatasets = async (): Promise<DatasetsResponse> => {
     const res = await fetch(`${API_URL}/datasets`);
     if (!res.ok) throw await readError(res, 'Nepodařilo se načíst přehled dat');

@@ -6,13 +6,16 @@ import type { LucideIcon } from 'lucide-react';
 import type { Category, Location, PlanRequest } from '../types/api';
 import { fetchLocations } from '../services/apiClient';
 import { ALL_INTERESTS, DIFFICULTY_LABELS, FOOD_PREFERENCES, INTERESTS, TRANSPORT_LABELS } from '../constants';
-import { CategoryBadge, TransportIcon } from '../components/Icons';
+import { CategoryBadge } from '../components/Icons';
+import CarProgress from '../components/CarProgress';
+import TransportPicker from '../components/TransportPicker';
+import { ChoiceCard, NumberField } from '../components/FormControls';
 import LocationPicker from '../components/LocationPicker';
 import TownMap from '../components/TownMap';
 import { addDays, allocateDays } from '../utils/vacation';
 import { encodePlan, localDate, normalizeTimes } from '../utils/plan';
 
-const STEPS = 5;
+const STEPS = 6;
 const MAX_DAYS = 14;
 const inputClass = 'w-full border border-gray-300 rounded-xl p-3 focus:outline-none focus:ring-2 focus:ring-primary';
 
@@ -30,6 +33,7 @@ interface VacationForm {
     pace: Pace;
     towns: string[];                   // obce v pořadí návštěvy
     transport_mode: PlanRequest['transport_mode'];
+    wheelchair_accessible: boolean;
     interests: Category[];
     gastro: boolean;
     food_preferences: string[];
@@ -46,7 +50,7 @@ const daysWord = (n: number) => (n === 1 ? 'den' : n < 5 ? 'dny' : 'dní');
 function initialForm(): VacationForm {
     const tomorrow = addDays(localDate(new Date()), 1);
     const defaults: VacationForm = {
-        arrival: tomorrow, departure: addDays(tomorrow, 3), pace: 'normal', towns: [], transport_mode: 'CAR',
+        arrival: tomorrow, departure: addDays(tomorrow, 3), pace: 'normal', towns: [], transport_mode: 'CAR', wheelchair_accessible: false,
         interests: [], gastro: true, food_preferences: [], willing_to_pay_entry: true, budget_max: '', participants: '1',
         difficulty: 'MEDIUM', has_children: false, indoor_when_rain: false,
     };
@@ -88,6 +92,7 @@ function toPlanRequest(f: VacationForm): PlanRequest {
         participants_count: Math.min(Math.max(parseInt(f.participants) || 1, 1), 50),
         difficulty: f.difficulty,
         has_children: f.has_children,
+        wheelchair_accessible: f.transport_mode === 'WALK' && f.wheelchair_accessible,
         indoor_when_rain: f.indoor_when_rain,
     };
 }
@@ -133,24 +138,19 @@ export default function VacationWizard() {
         navigate(`/dovolena/vysledek?plan=${encodePlan(toPlanRequest(form))}`);
     };
 
-    const tile = (active: boolean) => `rounded-2xl border-2 cursor-pointer transition ${active ? 'border-primary bg-secondary' : 'border-gray-200 hover:border-primary'}`;
+    const tile = (active: boolean) => `rounded-2xl border-2 cursor-pointer transition shadow-sm hover:shadow-md hover:border-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${active ? 'border-primary bg-secondary' : 'border-gray-200 bg-white'}`;
     const schedule = form.towns.length > 0 && days >= 1 && form.towns.length <= days * 3 ? allocateDays(days, form.towns.map(Number)) : [];
 
     return (
         <div className="container mx-auto pt-28 pb-12 px-4 max-w-4xl">
             <p className="text-sm font-semibold uppercase tracking-widest text-primary">Plánovač dovolené</p>
-            <div className="mb-8 mt-2">
-                <p className="text-primary-dark font-medium mb-2">Krok {step} z {STEPS}</p>
-                <div className="w-full bg-secondary rounded-full h-2.5">
-                    <div className="bg-primary h-2.5 rounded-full transition-all duration-300" style={{ width: `${(step / STEPS) * 100}%` }} />
-                </div>
-            </div>
+            <div className="mt-2"><CarProgress step={step} total={STEPS} /></div>
 
             <div className="bg-white rounded-3xl shadow-xl shadow-primary/10 p-6 md:p-8 border border-secondary">
                 <form onSubmit={onSubmit}>
                     {step === 1 && (
                         <div className="space-y-6">
-                            <h2 className="text-2xl font-bold text-primary-dark">Kdy pojedeš?</h2>
+                            <h2 className="text-2xl font-bold text-primary-dark">Krok 1 – Kdy pojedeš?</h2>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-primary-dark mb-2">Příjezd</label>
@@ -182,7 +182,7 @@ export default function VacationWizard() {
 
                     {step === 2 && (
                         <div className="space-y-5">
-                            <h2 className="text-2xl font-bold text-primary-dark">Kam se chceš podívat?</h2>
+                            <h2 className="text-2xl font-bold text-primary-dark">Krok 2 – Kam se chceš podívat?</h2>
                             <p className="text-gray-600">Klikni na obce na mapě, nebo je vyhledej. Navštívíme je v pořadí výběru.</p>
                             {locationsError ? <p className="bg-red-100 text-red-700 p-3 rounded-xl">{locationsError}</p> : (
                                 <>
@@ -216,24 +216,20 @@ export default function VacationWizard() {
                                     <p className="text-xs text-gray-500 mt-2">Víc obcí než dní = výlet přes víc měst za den. Když v obci program dojde, přidáme okolí.</p>
                                 </div>
                             )}
-                            <div>
-                                <p className="text-primary-dark mb-2">Jak se budeš přesouvat?</p>
-                                <div className="grid grid-cols-3 gap-3">
-                                    {(['CAR', 'BIKE', 'WALK'] as const).map(mode => (
-                                        <button key={mode} type="button" onClick={() => update({ transport_mode: mode })} aria-pressed={form.transport_mode === mode}
-                                            className={`${tile(form.transport_mode === mode)} flex flex-col items-center gap-1 p-4`}>
-                                            <TransportIcon mode={mode} size={30} className="text-primary" />
-                                            <span className="font-semibold">{TRANSPORT_LABELS[mode]}</span>
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
                         </div>
                     )}
 
                     {step === 3 && (
                         <div className="space-y-6">
-                            <h2 className="text-2xl font-bold text-primary-dark">Co tě baví?</h2>
+                            <h2 className="text-2xl font-bold text-primary-dark">Krok 3 – Jak se budeš přesouvat?</h2>
+                            <TransportPicker mode={form.transport_mode} wheelchair={form.wheelchair_accessible}
+                                onMode={m => update({ transport_mode: m })} onWheelchair={on => update({ wheelchair_accessible: on })} />
+                        </div>
+                    )}
+
+                    {step === 4 && (
+                        <div className="space-y-6">
+                            <h2 className="text-2xl font-bold text-primary-dark">Krok 4 – Co tě baví?</h2>
                             <p className="text-gray-600">Vyber, co tě zajímá, nebo nic nevybírej a necháš se překvapit.</p>
                             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                                 {INTERESTS.map(interest => {
@@ -250,73 +246,70 @@ export default function VacationWizard() {
                                     );
                                 })}
                             </div>
-                            <label className="flex items-center space-x-3 p-4 border rounded-xl hover:bg-secondary cursor-pointer transition">
-                                <input type="checkbox" checked={form.gastro} onChange={e => update({ gastro: e.target.checked })} className="text-primary focus:ring-primary h-5 w-5 rounded" />
-                                <span>Každý den zastávka na oběd</span>
-                            </label>
+                            <ChoiceCard type="checkbox" name="gastro" checked={form.gastro} onChange={e => update({ gastro: e.target.checked })}
+                                title="Každý den zastávka na oběd" hint="Restaurace, kavárna nebo pivovar podle preferencí" />
                             {form.gastro && (
-                                <div className="flex flex-wrap gap-3">
-                                    {FOOD_PREFERENCES.map(pref => {
-                                        const on = form.food_preferences.includes(pref.value);
-                                        return (
-                                            <label key={pref.value} className="flex items-center space-x-2 px-4 py-2 border rounded-full hover:bg-secondary cursor-pointer transition">
-                                                <input type="checkbox" checked={on} className="text-primary focus:ring-primary rounded"
+                                <fieldset>
+                                    <legend className="block text-primary-dark font-semibold mb-3">Preference <span className="font-normal text-gray-500">(nepovinné)</span></legend>
+                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                        {FOOD_PREFERENCES.map(pref => {
+                                            const on = form.food_preferences.includes(pref.value);
+                                            return (
+                                                <ChoiceCard key={pref.value} type="checkbox" name="food_preferences" value={pref.value} checked={on} title={pref.label}
                                                     onChange={() => update({ food_preferences: on ? form.food_preferences.filter(p => p !== pref.value) : [...form.food_preferences, pref.value] })} />
-                                                <span>{pref.label}</span>
-                                            </label>
-                                        );
-                                    })}
-                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </fieldset>
                             )}
                         </div>
                     )}
 
-                    {step === 4 && (
-                        <div className="space-y-6">
-                            <h2 className="text-2xl font-bold text-primary-dark">S kým a za kolik?</h2>
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                                <div>
-                                    <label className="block text-primary-dark mb-2">Počet osob</label>
-                                    <input type="number" min="1" max="50" step="1" value={form.participants} onChange={e => update({ participants: e.target.value })} className={inputClass} />
+                    {step === 5 && (
+                        <div className="space-y-8">
+                            <h2 className="text-2xl font-bold text-primary-dark">Krok 5 – S kým a za kolik?</h2>
+
+                            <fieldset>
+                                <legend className="block text-primary-dark font-semibold mb-3">Ochota platit vstupné</legend>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    <ChoiceCard type="radio" name="willing_to_pay_entry" value="yes" checked={form.willing_to_pay_entry}
+                                        onChange={() => update({ willing_to_pay_entry: true })} title="Ano, chci vidět vše" hint="Plánuji i placená místa" />
+                                    <ChoiceCard type="radio" name="willing_to_pay_entry" value="no" checked={!form.willing_to_pay_entry}
+                                        onChange={() => update({ willing_to_pay_entry: false })} title="Ne, pouze zdarma" hint="Jen místa bez vstupného" />
                                 </div>
-                                <div>
-                                    <label className="block text-primary-dark mb-2">Vstupné</label>
-                                    <select value={form.willing_to_pay_entry ? 'yes' : 'no'} onChange={e => update({ willing_to_pay_entry: e.target.value === 'yes' })} className={inputClass}>
-                                        <option value="yes">Ano, chci vidět vše</option>
-                                        <option value="no">Ne, pouze zdarma</option>
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="block text-primary-dark mb-2">Rozpočet za den, všichni (Kč)</label>
-                                    <input type="number" min="0" step="50" placeholder="bez omezení" value={form.budget_max} onChange={e => update({ budget_max: e.target.value })} className={inputClass} />
-                                </div>
+                            </fieldset>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <NumberField label="Počet osob" unit="os." name="participants" min="1" max="50" step="1" value={form.participants} onChange={e => update({ participants: e.target.value })} />
+                                <NumberField label="Rozpočet za den, všichni" unit="Kč" name="budget_max" min="0" step="50" placeholder="bez omezení" value={form.budget_max} onChange={e => update({ budget_max: e.target.value })} />
                             </div>
-                            <div>
-                                <label className="block text-primary-dark mb-2">Náročnost</label>
-                                <select value={form.difficulty} onChange={e => update({ difficulty: e.target.value as VacationForm['difficulty'] })} className={inputClass}>
-                                    <option value="EASY">Lehká – jen snadno dostupná místa</option>
-                                    <option value="MEDIUM">Střední – i rozhledny a lanová centra</option>
-                                    <option value="HARD">Náročná – cokoliv</option>
-                                </select>
+
+                            <fieldset>
+                                <legend className="block text-primary-dark font-semibold mb-3">Náročnost</legend>
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                    {([['EASY', 'Lehká', 'Jen snadno dostupná místa'], ['MEDIUM', 'Střední', 'I rozhledny a lanová centra'], ['HARD', 'Náročná', 'Cokoliv']] as const).map(([value, title, hint]) => (
+                                        <ChoiceCard key={value} type="radio" name="difficulty" value={value} checked={form.difficulty === value}
+                                            onChange={() => update({ difficulty: value })} title={title} hint={hint} />
+                                    ))}
+                                </div>
+                            </fieldset>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <ChoiceCard type="checkbox" name="has_children" checked={form.has_children} onChange={e => update({ has_children: e.target.checked })}
+                                    title="Jedu s dětmi" hint="Jen místa vhodná pro rodiny" />
+                                <ChoiceCard type="checkbox" name="indoor_when_rain" checked={form.indoor_when_rain} onChange={e => update({ indoor_when_rain: e.target.checked })}
+                                    title="Při dešti jen uvnitř" hint="Jinak plán nezměníme, jen upozorníme na déšť" />
                             </div>
-                            <label className="flex items-center space-x-3 p-4 border rounded-xl hover:bg-secondary cursor-pointer transition">
-                                <input type="checkbox" checked={form.has_children} onChange={e => update({ has_children: e.target.checked })} className="text-primary focus:ring-primary h-5 w-5 rounded" />
-                                <span>Jedu s dětmi</span>
-                            </label>
-                            <label className="flex items-center space-x-3 p-4 border rounded-xl hover:bg-secondary cursor-pointer transition">
-                                <input type="checkbox" checked={form.indoor_when_rain} onChange={e => update({ indoor_when_rain: e.target.checked })} className="text-primary focus:ring-primary h-5 w-5 rounded" />
-                                <span>Když bude pršet, chci jen místa uvnitř <span className="block text-sm text-gray-500">Jinak plán nezměníme, jen tě na déšť upozorníme.</span></span>
-                            </label>
                         </div>
                     )}
 
-                    {step === 5 && (
+                    {step === 6 && (
                         <div className="space-y-6">
-                            <h2 className="text-2xl font-bold text-primary-dark">Shrnutí</h2>
+                            <h2 className="text-2xl font-bold text-primary-dark">Krok 6 – Shrnutí</h2>
                             <div className="bg-secondary p-6 rounded-xl space-y-2">
                                 <p><strong>Termín:</strong> {new Date(form.arrival).toLocaleDateString('cs-CZ')} – {new Date(form.departure).toLocaleDateString('cs-CZ')} ({days} {daysWord(days)})</p>
                                 <p><strong>Tempo:</strong> {PACES.find(p => p.value === form.pace)?.label} ({PACES.find(p => p.value === form.pace)?.hint})</p>
-                                <p><strong>Doprava:</strong> {TRANSPORT_LABELS[form.transport_mode]}</p>
+                                <p><strong>Doprava:</strong> {TRANSPORT_LABELS[form.transport_mode]}{form.transport_mode === 'WALK' && form.wheelchair_accessible ? ' (bezbariérově)' : ''}</p>
                                 <p><strong>Zájmy:</strong> {form.interests.length ? INTERESTS.filter(i => form.interests.includes(i.value)).map(i => i.label).join(', ') : 'Překvap mě'}{form.gastro ? ' + oběd' : ''}</p>
                                 <p><strong>Počet osob:</strong> {form.participants || 1}</p>
                                 <p><strong>Vstupné:</strong> {form.willing_to_pay_entry ? 'ano' : 'jen zdarma'}{form.budget_max ? `, max. ${form.budget_max} Kč za den` : ''}</p>

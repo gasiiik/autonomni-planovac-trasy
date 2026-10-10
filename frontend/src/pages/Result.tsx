@@ -15,7 +15,6 @@ import { cityEventsUrl, townFromStartName, EVENTS_CALENDAR_URL } from '../utils/
 import { planVacation } from '../utils/vacation';
 import type { Stay, Trip, TripDay } from '../utils/vacation';
 import RouteMap from '../components/RouteMap';
-import TripOverviewMap from '../components/TripOverviewMap';
 import PlaceImage from '../components/PlaceImage';
 import FavoriteButton from '../components/FavoriteButton';
 
@@ -71,8 +70,11 @@ function LoadingScreen() {
 }
 
 function TravelItem({ item }: { item: ItineraryItem }) {
+    if (item.type === 'buffer') {
+        return <p className="text-gray-400 text-sm flex items-center gap-1.5"><Clock size={16} aria-hidden="true" /> {item.title}</p>;
+    }
     if (item.type === 'wait') {
-        return <p className="text-gray-500 text-sm flex items-center gap-1.5"><Clock size={16} aria-hidden="true" /> {item.title}</p>;
+        return <p className="text-gray-500 text-sm flex items-center gap-1.5"><Clock size={16} aria-hidden="true" /> {item.message ?? item.title}</p>;
     }
     const mode = item.mode ?? 'CAR';
     return (
@@ -307,7 +309,10 @@ function ResultView() {
     const tripDay = trip?.days[activeDay] ?? null;
     const result = tripDay?.plan ?? single;
     // Pro přehledovou mapu jen jednou (jinak by se překreslovala při každém najetí myší)
-    const overviewDays = useMemo(() => trip?.days.map(d => d.plan.waypoints) ?? [], [trip]);
+    // Dovolená: ostatní dny se kreslí do téže mapy jako vybraný den
+    const otherDays = useMemo(
+        () => trip?.days.map((d, day) => ({ day, waypoints: d.plan.waypoints })).filter(d => d.day !== activeDay) ?? [],
+        [trip, activeDay]);
 
     // Klik na značku v mapě -> posun seznamu na zastávku
     const selectStop = useCallback((n: number) => {
@@ -449,10 +454,7 @@ function ResultView() {
                                     <Printer size={18} aria-hidden="true" /> Celá dovolená do PDF / tisk
                                 </button>
                             </div>
-                            <div className="h-72 rounded-2xl overflow-hidden border border-secondary mb-2 relative z-0">
-                                <TripOverviewMap days={overviewDays} onSelectDay={d => { setActiveDay(d); setActiveStop(null); }} />
-                            </div>
-                            <p className="text-xs text-gray-500 mb-4">Každý den má jinou barvu, žluté body jsou ubytování. Kliknutím na trasu otevřeš daný den.</p>
+                            <p className="text-xs text-gray-500 mb-3">Na mapě vpravo je celá dovolená: vybraný den s očíslovanými zastávkami, ostatní dny barevně zeslabené, žlutě ubytování. Kliknutím na trasu nebo bod jiného dne ho otevřeš.</p>
                             <div className="flex flex-wrap gap-2" role="tablist">
                                 {trip.days.map((d, i) => (
                                     <button key={d.date} role="tab" aria-selected={i === activeDay}
@@ -613,7 +615,7 @@ function ResultView() {
                 {/* Mapa */}
                 <div className="lg:w-1/2 print:hidden">
                     <div className="sticky top-28 rounded-3xl h-[450px] lg:h-[calc(100vh-8rem)] overflow-hidden shadow-lg border border-secondary z-0">
-                        <RouteMap key={activeDay} waypoints={result.waypoints} transport={request.transport_mode} activeStop={activeStop} onSelectStop={selectStop} />
+                        <RouteMap key={activeDay} waypoints={result.waypoints} transport={request.transport_mode} wheelchair={request.wheelchair_accessible} otherDays={otherDays} onSelectDay={d => { setActiveDay(d); setActiveStop(null); }} activeStop={activeStop} onSelectStop={selectStop} />
                         {stops.length > 0 && (
                             <div className="absolute top-3 right-3 z-[1000] flex gap-2">
                                 <a href={googleRouteUrl(result.waypoints, request.transport_mode)} target="_blank" rel="noopener noreferrer" className={MAP_BTN}>

@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 from types import SimpleNamespace
 from zoneinfo import ZoneInfo
 import urllib.request
+import urllib.parse
 import json
 
 from .database import get_db, SessionLocal
@@ -104,6 +105,8 @@ class PlanRequest(BaseModel):
     difficulty: Optional[str] = "EASY"
     participants_count: Optional[int] = 1
     has_children: Optional[bool] = False
+    buffer_mins: Optional[int] = None   # rezerva po každém přesunu (parkování, zorientování); None = výchozí podle dopravy
+    wheelchair_accessible: Optional[bool] = False   # pěšky bezbariérově (kočárek, vozík): bez schodů a stoupání, pomalejší tempo
     exclude_ids: Optional[List[int]] = []  # místa navštívená v předchozích dnech dovolené / vyřazená uživatelem
     max_stops: Optional[int] = None        # nejvýš tolik zastávek
     swap_id: Optional[int] = None          # "Vyměnit za jiné místo": které místo nahradit...
@@ -122,11 +125,114 @@ def haversine_distance(lat1, lon1, lat2, lon2):
     c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
     return R * c
 
+def timing_mode(req) -> str:
+    """Rychlost pro výpočet času cesty: bezbariérová chůze je pomalejší než běžná."""
+    return "WALK_ACC" if req.transport_mode.upper() == "WALK" and req.wheelchair_accessible else req.transport_mode
+
+
+# Místa, kam se vozíkem/kočárkem obvykle nedostanete (schody, kopce, nerovný terén)
+INACCESSIBLE_TYPES = {"ROZHLEDNA", "LANOVKA", "LYZOVANI", "PRIRODA", "HRAD", "GOLF", "JEZDECTVI"}
+
+# Časová rezerva po každém přesunu na další místo (parkování, zorientování se, přechod, zpoždění).
+# Výchozí hodnoty podle dopravy; uživatel/klient je může přepsat parametrem buffer_mins (0-30).
+DEFAULT_BUFFER_MINS = {"CAR": 5, "BIKE": 3, "WALK": 2, "WALK_ACC": 3}
+MIN_MOVE_KM = 0.01   # blíž než 10 m = jsme na místě, žádný přesun ani rezerva
+
+def buffer_for(req, dist_km: float) -> int:
+    if dist_km < MIN_MOVE_KM:
+        return 0
+    if req.buffer_mins is not None:
+        return max(0, min(int(req.buffer_mins), 30))
+    return DEFAULT_BUFFER_MINS.get(timing_mode(req).upper(), 5)
+
+
+def wait_message(mins: int) -> str:
+    n = abs(mins)
+    unit = "minutu" if n == 1 else ("minuty" if 2 <= n <= 4 else "minut")
+    return f"Na místě budete čekat {n} {unit} před začátkem prohlídky."
+
+
+def visit_window(p, day: datetime):
+    """Kdy je místo ten den k návštěvě otevřené (otevírací doba zúžená na denní dobu návštěv)."""
+    day = day.replace(second=0, microsecond=0)
+    try:
+        oh_h, oh_m = map(int, p.open_time.split(':'))
+        ct_h, ct_m = map(int, p.close_time.split(':'))
+        open_dt, close_dt = day.replace(hour=oh_h, minute=oh_m), day.replace(hour=ct_h, minute=ct_m)
+    except (AttributeError, ValueError):
+        open_dt, close_dt = day.replace(hour=0, minute=0), day.replace(hour=23, minute=59)
+    return (max(open_dt, day.replace(hour=VISIT_FROM[0], minute=VISIT_FROM[1])),
+            min(close_dt, day.replace(hour=VISIT_TO[0], minute=VISIT_TO[1])))
+
+
+OPTIMIZE_EXACT_MAX = 8   # do tolika zastávek zkoušíme všechna pořadí, výš heuristika (nejbližší soused + 2-opt)
+
+def optimize_order(start, stops, mode, loop, t_start, t_end, buffer=lambda km: 0):
+    """Pořadí zastávek s nejkratším časem (cesta + čekání) při dodržení otevíracích dob (time windows).
+    start = (lat, lng); stops = [{id, lat, lng, dur, open, close, gastro_start}] (open/close datetime)
+    Vrací seznam id v nejlepším pořadí, nebo None, když se nic proveditelného nenašlo."""
+    from itertools import permutations
+    n = len(stops)
+    d_start = [haversine_distance(start[0], start[1], s["lat"], s["lng"]) for s in stops]
+    d = [[haversine_distance(a["lat"], a["lng"], b["lat"], b["lng"]) for b in stops] for a in stops]
+
+    def cost(order):
+        t, prev, total = t_start, None, 0
+        for i in order:
+            km = d_start[i] if prev is None else d[prev][i]
+            travel = calc_travel_time(km, mode) + buffer(km)
+            arrive = t + timedelta(minutes=travel)
+            s = stops[i]
+            wait = max(0, math.ceil((s["open"] - arrive).total_seconds() / 60))
+            if wait > MAX_WAIT_MINS:
+                return None
+            begin = arrive + timedelta(minutes=wait)
+            if begin + timedelta(minutes=s["dur"]) > s["close"]:
+                return None
+            # jídlo zůstane zhruba ve svém čase (oběd se nesmí přesunout na večer)
+            if s["gastro_start"] and abs((begin - s["gastro_start"]).total_seconds()) > 90 * 60:
+                return None
+            total += travel + wait
+            t, prev = begin + timedelta(minutes=s["dur"]), i
+        if loop:
+            back = calc_travel_time(d_start[prev], mode)
+            t += timedelta(minutes=back)
+            total += back
+        return None if t > t_end else total
+
+    best, best_cost = None, None
+    if n <= OPTIMIZE_EXACT_MAX:
+        for perm in permutations(range(n)):
+            c = cost(perm)
+            if c is not None and (best_cost is None or c < best_cost):
+                best, best_cost = list(perm), c
+    else:
+        # nejbližší soused od startu, pak 2-opt: obracíme úseky, dokud se celkový čas zkracuje
+        left, order, cur = set(range(n)), [], None
+        while left:
+            nxt = min(left, key=lambda i: d_start[i] if cur is None else d[cur][i])
+            order.append(nxt); left.discard(nxt); cur = nxt
+        best_cost = cost(order)
+        best = order if best_cost is not None else None
+        improved = best is not None
+        while improved:
+            improved = False
+            for i in range(n - 1):
+                for j in range(i + 1, n):
+                    cand = best[:i] + best[i:j + 1][::-1] + best[j + 1:]
+                    c = cost(cand)
+                    if c is not None and c < best_cost:
+                        best, best_cost, improved = cand, c, True
+    return [stops[i]["id"] for i in best] if best else None
+
+
 def calc_travel_time(dist_km: float, mode: str) -> int:
     # Zde by v produkci bylo volání Google Maps Distance Matrix API
     # Pro účely backendu simulujeme průměrné rychlosti.
-    speeds = {"WALK": 5.0, "BIKE": 15.0, "CAR": 40.0}
+    speeds = {"WALK": 5.0, "WALK_ACC": 3.5, "BIKE": 15.0, "CAR": 40.0}   # WALK_ACC = bezbariérová chůze (kočárek, vozík)
     spd = speeds.get(mode.upper(), 5.0)
+    if dist_km < MIN_MOVE_KM:
+        return 0
     return math.ceil((dist_km / spd) * 60)
 
 # Okruh "obce" při výletu přes víc měst - čas dne se dělí mezi místa v těchto okruzích
@@ -189,6 +295,96 @@ def get_photo(u: str, db: Session = Depends(get_db)):
             raise HTTPException(status_code=404, detail="Fotku se nepodařilo stáhnout.")
     path, ctype = hit
     return FileResponse(path, media_type=ctype, headers={"Cache-Control": "public, max-age=2592000"})
+
+
+# Hledání adresy -> souřadnice. Primárně Photon (OpenStreetMap, umí našeptávání po částech slov: "matěje" ->
+# "Matěje Kopeckého, Cheb"), záložně Nominatim. Výsledky se omezují na Karlovarský kraj a okolí (bbox)
+# a řadí podle blízkosti k poloze uživatele (nebo ke středu kraje). Dotazy se drží v paměti.
+_geocode_cache = {}
+GEOCODE_BBOX = (11.7, 49.6, 13.4, 50.6)   # lng_min, lat_min, lng_max, lat_max
+GEOCODE_CENTER = (50.1, 12.7)             # střed kraje - bias, když neznáme polohu uživatele
+GEOCODE_UA = "KrusnoPlan/1.0 (https://github.com/gasiiik/autonomni-planovac-trasy; SOC projekt - planovac tras)"
+
+def _norm(t: str) -> str:
+    import unicodedata
+    return "".join(c for c in unicodedata.normalize("NFD", t.lower()) if unicodedata.category(c) != "Mn")
+
+def _http_json(url: str):
+    req = urllib.request.Request(url, headers={"User-Agent": GEOCODE_UA})
+    with urllib.request.urlopen(req, timeout=8) as resp:
+        return json.loads(resp.read().decode("utf-8"))
+
+def _photon_label(pr: dict) -> str:
+    street = pr.get("street")
+    head = f"{street} {pr['housenumber']}" if street and pr.get("housenumber") else (street or pr.get("name") or "")
+    if street and pr.get("name") and pr["name"] != street and not pr.get("housenumber"):
+        head = f"{pr['name']}, {street}"   # např. budova/podnik na ulici
+    town = pr.get("city") or pr.get("town") or pr.get("village") or pr.get("locality") or pr.get("county") or ""
+    place = f"{town}, {pr['district']}" if pr.get("district") and pr.get("district") != town else town
+    parts = [x for x in (head, place, pr.get("postcode")) if x]
+    return ", ".join(dict.fromkeys(parts))
+
+def _geocode_photon(q, lat, lng):
+    url = "https://photon.komoot.io/api/?" + urllib.parse.urlencode({
+        "q": q, "limit": 10, "lat": lat, "lon": lng, "location_bias_scale": 0.4,
+        "bbox": ",".join(map(str, GEOCODE_BBOX)),
+    })
+    out = []
+    for f in _http_json(url).get("features", []):
+        pr, (x, y) = f["properties"], f["geometry"]["coordinates"]
+        if pr.get("countrycode") not in (None, "CZ"):
+            continue
+        # bbox zasahuje i do sousedních krajů; kraj/okres samotný (type state/county) není adresa
+        if pr.get("state") not in (None, "Karlovarský kraj") or pr.get("type") in ("state", "county", "country"):
+            continue
+        label = _photon_label(pr)
+        if label:
+            out.append({"name": label, "lat": y, "lng": x})
+    return out
+
+def _geocode_nominatim(q):
+    url = "https://nominatim.openstreetmap.org/search?" + urllib.parse.urlencode({
+        "q": q, "format": "jsonv2", "countrycodes": "cz", "limit": 8, "accept-language": "cs",
+        "viewbox": f"{GEOCODE_BBOX[0]},{GEOCODE_BBOX[3]},{GEOCODE_BBOX[2]},{GEOCODE_BBOX[1]}", "bounded": 1,
+    })
+    return [{"name": r["display_name"], "lat": float(r["lat"]), "lng": float(r["lon"])} for r in _http_json(url)]
+
+@app.get("/internal/geocode")
+def geocode(q: str, lat: Optional[float] = None, lng: Optional[float] = None, db: Session = Depends(get_db)):
+    q = " ".join(q.split())
+    if len(q) < 2:
+        return []
+    ref = (lat, lng) if lat is not None and lng is not None else GEOCODE_CENTER
+    key = (_norm(q), round(ref[0], 2), round(ref[1], 2))
+    if key in _geocode_cache:
+        return _geocode_cache[key]
+    # Obce z databáze: okamžitě a i při částečném zadání ("kar" -> Karlovy Vary)
+    nq = _norm(q)
+    towns = [{"name": l.name, "lat": l.lat, "lng": l.lng} for l in db.query(Location).all() if _norm(l.name).startswith(nq)]
+    found, failed = [], False
+    try:
+        found = _geocode_photon(q, ref[0], ref[1])
+    except Exception:
+        failed = True
+    if not found:
+        try:
+            found = _geocode_nominatim(q)
+            failed = False
+        except Exception:
+            pass
+    if failed and not found and not towns:
+        raise HTTPException(status_code=502, detail="Vyhledávání adres je teď nedostupné. Zkus to za chvíli.")
+    # Blíž k uživateli / středu kraje dřív; obce na začátek; duplicity pryč
+    found.sort(key=lambda r: haversine_distance(ref[0], ref[1], r["lat"], r["lng"]))
+    results, seen = [], set()
+    for r in towns[:3] + found:
+        k = _norm(r["name"])
+        if k not in seen:
+            seen.add(k)
+            results.append({"name": r["name"], "lat": float(r["lat"]), "lng": float(r["lng"])})
+    results = results[:8]
+    _geocode_cache[key] = results
+    return results
 
 
 @app.get("/internal/locations")
@@ -297,7 +493,45 @@ def dataset_sources(db: Session) -> dict:
 def generate_plan(req: PlanRequest, db: Session = Depends(get_db)):
     if req.swap_id is not None and req.keep_ids:
         return swap_plan(req, db)
-    return build_plan(req, db)
+    plan = build_plan(req, db)
+    if req.order_ids:   # zastávky si uspořádal uživatel (úprava plánu) - pořadí nechceme měnit
+        return plan
+    return reorder_plan(req, db, plan)
+
+
+def plan_distance(plan) -> float:
+    return sum(i.get("distance_km", 0) for i in plan["itinerary"] if i["type"] in ("travel", "travel_return"))
+
+
+def reorder_plan(req: PlanRequest, db: Session, plan):
+    """Greedy výběr (nejbližší soused) vybere zastávky, tady je ještě seřadíme tak, aby trasa neběhala
+    sem a tam: nejkratší čas cesty + čekání při dodržení otevíracích dob. Nové pořadí se přijme jen tehdy,
+    když plánovač s ním stihne všechny stejné zastávky a trasa je kratší."""
+    pois = [i for i in plan["itinerary"] if i["type"] == "poi" and i.get("poi_id") is not None]
+    if len(pois) < 3:
+        return plan
+    t_from = datetime.strptime(req.time_from, "%Y-%m-%d %H:%M:%S")
+    t_to = datetime.strptime(req.time_to, "%Y-%m-%d %H:%M:%S")
+    rows = {p.id: p for p in db.query(ActivityPOI).filter(ActivityPOI.id.in_([i["poi_id"] for i in pois if i["poi_id"] > 0])).all()}
+    stops = []
+    for i in pois:
+        row = rows.get(i["poi_id"])
+        day = t_from.replace(hour=0, minute=0)
+        op, cl = visit_window(row, day) if row else (day.replace(hour=VISIT_FROM[0]), day.replace(hour=VISIT_TO[0]))
+        started = datetime.strptime(f"{t_from:%Y-%m-%d} {i['start']}", "%Y-%m-%d %H:%M")
+        stops.append({"id": i["poi_id"], "lat": i["lat"], "lng": i["lng"], "dur": i["duration_mins"], "open": op, "close": cl,
+                      "gastro_start": started if i.get("category") == "GASTRO" else None})
+    first = plan["waypoints"][0]
+    order = optimize_order((first["lat"], first["lng"]), stops, timing_mode(req),
+                           req.route_type.upper() == "LOOP", t_from, t_to, lambda km: buffer_for(req, km))
+    current = [i["poi_id"] for i in pois]
+    if not order or order == current:
+        return plan
+    alt = build_plan(req.model_copy(update={"order_ids": order, "only_ids": current}), db)
+    alt_ids = [i["poi_id"] for i in alt["itinerary"] if i["type"] == "poi"]
+    if set(alt_ids) >= set(current) and plan_distance(alt) < plan_distance(plan) - 0.05:
+        return alt
+    return plan
 
 
 SWAP_NEARBY_KM = 3.0  # náhrada za vyměněné místo: kandidáti i z okolí tohoto místa
@@ -440,6 +674,7 @@ def build_plan(req: PlanRequest, db: Session):
 
     # Klonování listu POI pro algoritmus "Nejbližší soused" (Nearest Neighbor)
     unvisited = pois[:]
+    wheelchair = bool(req.wheelchair_accessible) and req.transport_mode.upper() == "WALK"
 
     current_time = t_from
     remaining_mins = total_mins
@@ -474,8 +709,9 @@ def build_plan(req: PlanRequest, db: Session):
 
             # 2. Zohlednění otevírací doby (Opening Hours)
             dist = haversine_distance(curr_lat, curr_lng, p.lat, p.lng)
-            travel_approx = calc_travel_time(dist, req.transport_mode)
-            arrival_time = current_time + timedelta(minutes=travel_approx)
+            travel_approx = calc_travel_time(dist, timing_mode(req))
+            buf = buffer_for(req, dist)
+            arrival_time = current_time + timedelta(minutes=travel_approx + buf)
             wait = 0
             day = arrival_time.replace(second=0, microsecond=0)
             try:
@@ -494,7 +730,7 @@ def build_plan(req: PlanRequest, db: Session):
                 wait = math.ceil((open_dt - arrival_time).total_seconds() / 60)
                 if wait > MAX_WAIT_MINS:
                     skip_reasons.add("otevírací doba")
-                    depart = open_dt - timedelta(minutes=travel_approx)
+                    depart = open_dt - timedelta(minutes=travel_approx + buf)
                     if next_departure is None or depart < next_departure:
                         next_departure = depart
                     continue
@@ -512,6 +748,11 @@ def build_plan(req: PlanRequest, db: Session):
                 continue
             if req.budget_max is not None and (total_estimated_cost + price) > req.budget_max:
                 skip_reasons.add("rozpočet")
+                continue
+
+            # a2) Bezbariérová chůze: bez rozhleden, hradů, lanovek a obtížnějších míst
+            if wheelchair and (poi_type(p) in INACCESSIBLE_TYPES or p.difficulty_level in ("MEDIUM", "HARD")):
+                skip_reasons.add("bezbariérový přístup")
                 continue
 
             # b) Děti a obtížnost
@@ -535,7 +776,7 @@ def build_plan(req: PlanRequest, db: Session):
                     continue
 
             # Řadíme podle toho, za jak dlouho můžeme s návštěvou začít (cesta + případné čekání)
-            feasible.append((travel_approx + wait, dist, p, wait))
+            feasible.append((travel_approx + buf + wait, dist, p, wait))
 
         # Výlet přes víc měst: čas dne rozdělíme mezi obce (dopoledne první, odpoledne druhá...)
         if len(day_towns) > 1 and feasible:
@@ -594,7 +835,7 @@ def build_plan(req: PlanRequest, db: Session):
         unvisited.remove(poi)
 
         dist_km = min_dist
-        travel_time = calc_travel_time(dist_km, req.transport_mode)
+        travel_time = calc_travel_time(dist_km, timing_mode(req))
 
         # 4. Limit na cestování
         if req.max_travel_time_mins is not None and (total_travel_time + travel_time) > req.max_travel_time_mins:
@@ -606,9 +847,10 @@ def build_plan(req: PlanRequest, db: Session):
         return_time = 0
         if req.route_type.upper() == "LOOP":
             return_dist = haversine_distance(poi.lat, poi.lng, start_lat, start_lng)
-            return_time = calc_travel_time(return_dist, req.transport_mode)
+            return_time = calc_travel_time(return_dist, timing_mode(req))
 
-        total_time_needed = travel_time + wait_mins + poi.est_duration_mins + return_time
+        buf_mins = buffer_for(req, dist_km)
+        total_time_needed = travel_time + buf_mins + wait_mins + poi.est_duration_mins + return_time
 
         if remaining_mins < total_time_needed:
             skip_reasons.add("nedostatek času")
@@ -627,6 +869,18 @@ def build_plan(req: PlanRequest, db: Session):
                 remaining_mins -= travel_time
                 total_travel_time += travel_time
 
+            # Rezerva po přesunu (parkování, zorientování) - začátek prohlídky = konec přesunu + rezerva
+            if buf_mins > 0:
+                itinerary.append({
+                    "type": "buffer",
+                    "start": current_time.strftime("%H:%M"),
+                    "end": (current_time + timedelta(minutes=buf_mins)).strftime("%H:%M"),
+                    "title": f"Rezerva {buf_mins} min (parkování, zorientování na místě)",
+                    "duration_mins": buf_mins
+                })
+                current_time += timedelta(minutes=buf_mins)
+                remaining_mins -= buf_mins
+
             # Čekání na otevření
             if wait_mins > 0:
                 itinerary.append({
@@ -634,6 +888,7 @@ def build_plan(req: PlanRequest, db: Session):
                     "start": current_time.strftime("%H:%M"),
                     "end": (current_time + timedelta(minutes=wait_mins)).strftime("%H:%M"),
                     "title": f"Čekání na otevření ({(current_time + timedelta(minutes=wait_mins)):%H:%M})",
+                    "message": wait_message(wait_mins),
                     "duration_mins": wait_mins
                 })
                 current_time += timedelta(minutes=wait_mins)
@@ -647,6 +902,8 @@ def build_plan(req: PlanRequest, db: Session):
                 "title": poi.name,
                 "category": poi.category,
                 "duration_mins": poi.est_duration_mins,
+                "wait_mins": wait_mins,   # čekání před začátkem prohlídky (už je započítané v harmonogramu)
+                "wait_message": wait_message(wait_mins) if wait_mins > 0 else None,
                 "lat": poi.lat,
                 "lng": poi.lng,
                 "image_url": poi.image_url,
@@ -676,7 +933,7 @@ def build_plan(req: PlanRequest, db: Session):
     # Návrat do startovního bodu, pokud je zvolen LOOP
     if req.route_type.upper() == "LOOP" and (curr_lat != start_lat or curr_lng != start_lng):
         final_dist = haversine_distance(curr_lat, curr_lng, start_lat, start_lng)
-        final_travel = calc_travel_time(final_dist, req.transport_mode)
+        final_travel = calc_travel_time(final_dist, timing_mode(req))
 
         itinerary.append({
             "type": "travel_return",
@@ -714,6 +971,7 @@ def build_plan(req: PlanRequest, db: Session):
         "location": loc.name,
         "route_type": req.route_type,
         "transport_mode": req.transport_mode,
+        "wheelchair_accessible": wheelchair,
         "waypoints": waypoints_for_map,
         "itinerary": itinerary,
         "remaining_free_time_mins": remaining_mins,

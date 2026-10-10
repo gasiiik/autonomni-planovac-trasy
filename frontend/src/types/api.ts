@@ -18,6 +18,8 @@ export interface PlanRequest {
     difficulty?: 'EASY' | 'MEDIUM' | 'HARD';
     participants_count?: number;
     has_children?: boolean;
+    buffer_mins?: number | null;     // rezerva po přesunu (výchozí podle dopravy)
+    wheelchair_accessible?: boolean; // pěšky bezbariérově (kočárek, vozík)
     indoor_when_rain?: boolean;
     exclude_ids?: number[];          // místa navštívená v předchozích dnech dovolené / vyřazená uživatelem
     max_stops?: number | null;       // "Odebrat zastávku" - plán s menším počtem zastávek
@@ -85,7 +87,7 @@ export interface Waypoint {
 }
 
 export interface ItineraryItem {
-    type: 'travel' | 'travel_return' | 'wait' | 'poi';
+    type: 'travel' | 'travel_return' | 'wait' | 'buffer' | 'poi';
     start: string;
     end: string;
     duration_mins: number;
@@ -93,8 +95,11 @@ export interface ItineraryItem {
     mode?: string;
     distance_km?: number;
     title?: string;
+    message?: string;          // u čekání: "Na místě budete čekat X minut před začátkem prohlídky."
     // zastávka (poi)
     category?: Category;
+    wait_mins?: number;
+    wait_message?: string | null;
     lat?: number;
     lng?: number;
     image_url?: string | null;
@@ -154,6 +159,7 @@ export interface PlanResponse {
     location: string;
     route_type: string;
     transport_mode: string;
+    wheelchair_accessible?: boolean;
     waypoints: Waypoint[];
     itinerary: ItineraryItem[];
     remaining_free_time_mins: number;

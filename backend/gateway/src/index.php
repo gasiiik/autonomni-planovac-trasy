@@ -71,6 +71,13 @@ if ($request_uri === '/api/planner' && $method === 'POST') {
     forward_to_engine('/internal/planner/generate', file_get_contents("php://input"));
 }
 
+// Hledání adresy pro výchozí místo výletu
+if ($request_uri === '/api/geocode' && $method === 'GET') {
+    $geo = ['q' => (string)($_GET['q'] ?? '')];
+    if (isset($_GET['lat'], $_GET['lng'])) { $geo['lat'] = (float)$_GET['lat']; $geo['lng'] = (float)$_GET['lng']; }
+    forward_to_engine('/internal/geocode?' . http_build_query($geo));
+}
+
 if ($request_uri === '/api/locations' && $method === 'GET') {
     forward_to_engine('/internal/locations');
 }
