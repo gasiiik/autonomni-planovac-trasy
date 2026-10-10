@@ -21,10 +21,10 @@ Všechny sady pocházejí z [Katalogu otevřených dat Karlovarského kraje – 
 | Datová sada | Míst | Licence |
 |---|---:|---|
 | [Zámky v Karlovarském kraji](https://www.datazapad.cz/datasets/464108d64a93430083119bfb0845af3c) | 24 | CC BY 4.0 (upraveno) |
-| [Hrady a jejich zříceniny v Karlovarském kraji](https://www.datazapad.cz/datasets/c3a42c283f0649248326a0bbd7dc5cc3) | 20 | CC BY 4.0 (upraveno) |
+| [Hrady a jejich zříceniny v Karlovarském kraji](https://www.datazapad.cz/datasets/c3a42c283f0649248326a0bbd7dc5cc3) | 19 | CC BY 4.0 (upraveno) |
 | [Muzea a galerie v Karlovarském kraji](https://www.datazapad.cz/datasets/5aa3b9fe8da6474786ff2b9c81b006cb) | 58 | CC BY 4.0 (upraveno) |
 | [Muzea v přírodě a skanzeny v Karlovarském kraji](https://www.datazapad.cz/datasets/6be3423787fd4c1fa19a70b025e2eb64) | 4 | CC BY 4.0 (upraveno) |
-| [Národní kulturní památky v Karlovarském kraji](https://www.datazapad.cz/datasets/c0ae279455b34b5fb4a929ef98675a5b) | 10 | CC0 1.0 |
+| [Národní kulturní památky v Karlovarském kraji](https://www.datazapad.cz/datasets/c0ae279455b34b5fb4a929ef98675a5b) | 8 | CC0 1.0 |
 | [Památky UNESCO v Karlovarském kraji](https://www.datazapad.cz/datasets/135900efd11e4df1865987b57428eb9f) | 0* | CC BY 4.0 (upraveno) |
 | [Náboženské památky v Karlovarském kraji](https://www.datazapad.cz/datasets/2c9bd5558c4a495c8424a84bc6b370e2) | 20 | CC BY 4.0 (upraveno) |
 | [Hornické a technické památky v Karlovarském kraji](https://www.datazapad.cz/datasets/3727aefc159e47fd8cb9d70432ab7397) | 14 | CC BY 4.0 (upraveno) |
@@ -35,10 +35,14 @@ Všechny sady pocházejí z [Katalogu otevřených dat Karlovarského kraje – 
 | [Lanová a zábavní centra v Karlovarském kraji](https://www.datazapad.cz/datasets/90441fa783444e1ead5ad71464504d6a) | 20 | CC BY 4.0 (upraveno) |
 | [Aquaparky, koupaliště a bazény v Karlovarském kraji](https://www.datazapad.cz/datasets/98d26c1b1c8f4bd49850af82a19a7f58) | 25 | CC BY 4.0 (upraveno) |
 | [Solné jeskyně v Karlovarském kraji](https://www.datazapad.cz/datasets/197c67d6a8604a78a57335fcabe4b4d2) | 11 | CC0 1.0 |
-| [Agroturistické destinace v Karlovarském kraji](https://www.datazapad.cz/datasets/5e900a28dedd446aa8ae18d49ac88d70) | 23 | CC BY 4.0 (upraveno) |
+| [Agroturistické destinace v Karlovarském kraji](https://www.datazapad.cz/datasets/5e900a28dedd446aa8ae18d49ac88d70) | 22 | CC BY 4.0 (upraveno) |
 | [Přírodní pozoruhodnosti v Karlovarském kraji](https://www.datazapad.cz/datasets/037f7b55d2d34fa88fd63bf2d2903839) | 16 | CC BY 4.0 (upraveno) |
 | [Botanické zahrady a arboreta v Karlovarském kraji](https://www.datazapad.cz/datasets/8ae1f28fc17f4918a0dba74bb11797ff) | 4 | CC BY 4.0 (upraveno) |
 | [Pivovarnictví v Karlovarském kraji](https://www.datazapad.cz/datasets/0ddb05a36f0c4b319975df6a4b1ed90e) | 13 | CC BY 4.0 (upraveno) |
+| [Golfová hřiště v Karlovarském kraji](https://www.datazapad.cz/datasets/58bc30d273d84926bc4e817aabca9321) | 9 | CC BY 4.0 (upraveno) |
+| [Jezdecké oddíly a kluby v Karlovarském kraji](https://www.datazapad.cz/datasets/4cc176ac502245ab8b6f40c425bb67b9) | 7 | CC BY 4.0 (upraveno) |
+| [Lyžařské vleky a lanovky v Karlovarském kraji](https://www.datazapad.cz/datasets/d130e2d3a13d4ca39b16761d2131619b) | 16 | CC BY 4.0 (upraveno) |
+| [Vojenské a pietní památky v Karlovarském kraji](https://www.datazapad.cz/datasets/142875a7b4ba49769393c8a3b80cca6d) | 11 | CC BY 4.0 (upraveno) |
 
 \* Sada UNESCO obsahuje hlavně celoplošné položky (lázeňská města, hornická krajina, geopark), které nejsou zastávkou na trase. Jediný bodový objekt (Kynžvartská daguerrotypie) se sloučil se záznamem Zámku Kynžvart.
 

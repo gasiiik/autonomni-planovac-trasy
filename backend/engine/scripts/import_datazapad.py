@@ -81,6 +81,14 @@ LAYERS = [
     # --- Příroda ---
     {"service": "Přírodní_pozoruhodnosti_v_KVK_WFL1", "category": "PARK", "duration": 60, "price": 0, "indoor": 0, "open": "00:00", "close": "23:59", "tags": "PRIRODA", "difficulty": "MEDIUM"},
     {"service": "Botanické_zahrady_a_arboreta_v_Karlovarském_kraji_WFL1", "category": "PARK", "duration": 60, "price": 60, "indoor": 0, "open": "09:00", "close": "18:00", "tags": "ZAHRADA"},
+    # --- Sport a volný čas (další datové sady DataZápad) ---
+    {"service": "Lyžařské_vleky_v_Karlovarském_kraji_WFL1", "category": "FUN", "duration": 180, "price": 600, "indoor": 0, "open": "09:00", "close": "16:00", "tags": "LYZOVANI", "kind": "Lyžařský areál", "difficulty": "MEDIUM",
+     "default_season": (12, 3), "all_year_if": r"letní|mimo zimní"},
+    {"service": "Golfová_hřiště_v_Karlovarském_kraji_WFL1", "category": "FUN", "duration": 180, "price": 1500, "indoor": 0, "open": "08:00", "close": "19:00", "tags": "GOLF", "kind": "Golfové hřiště", "difficulty": "MEDIUM", "family": 0,
+     "default_season": (4, 10)},
+    {"service": "Jezdecké_oddíly_a_kluby_v_Karlovarském_kraji_WFL1", "category": "FUN", "duration": 90, "price": 400, "indoor": 0, "open": "09:00", "close": "17:00", "tags": "JEZDECTVI", "kind": "Jezdecký areál",
+     "require": r"vyjížď|projížď|výcvik jezdců|výuk|kurz|hipoterap|pro veřejnost|jízd[ay] na koni|turist"},
+    {"service": "Vojenské_a_pietní_památky_v_KVK_WFL1", "category": "SIGHTSEEING", "duration": 20, "price": 0, "indoor": 0, "open": "06:00", "close": "22:00", "tags": "PIETNI"},
     # --- Gastro ---
     {"service": "Pivovarnictví_v_Karlovarském_kraji_WFL1", "category": "GASTRO", "duration": 60, "price": 200, "indoor": 1, "open": "11:00", "close": "22:00", "tags": "PIVOVAR,RESTAURACE", "family": 1, "kind": "Pivovar"},
 ]
@@ -164,8 +172,8 @@ def extract_website(a):
 
 
 def extract_address(a):
-    if a.get("adresa_solné_jeskyně"):
-        return a["adresa_solné_jeskyně"][:255]
+    if a.get("adresa_solné_jeskyně") or a.get("adresa_místa"):
+        return (a.get("adresa_solné_jeskyně") or a["adresa_místa"])[:255]
     obec = a.get("název_obce")
     ulice = first(a, "název_ulice", "ulice")
     cp = first(a, "číslo_domovní", "číšlo_domovní")
@@ -345,8 +353,13 @@ def build_description(cfg, a, status):
         access = access or a["přístupné"]
 
     parts = []
-    if a.get("popis"):
-        parts.append(a["popis"].rstrip(".") + ".")
+    popis = first(a, "popis", "stručný_popis")
+    if popis and not cfg.get("require"):
+        parts.append(popis.rstrip(".") + ".")
+    elif popis:
+        # Jezdecké kluby mají v popisu jen výčet služeb ("vyjížďky, výcvik...") -> doplníme typ a obec
+        place = f" v obci {a['název_obce']}" if a.get("název_obce") else ""
+        parts.append(f"{cfg.get('kind', 'Místo')}{place}: {popis.rstrip('.')}.")
     else:
         kind = first(a, "typ", "typ_atraktivity", "typ_centra", "typ_památky")
         flags = [lbl for k, lbl in _FLAG_LABELS.items() if is_true(a.get(k))]
@@ -402,6 +415,9 @@ def feature_to_poi(cfg, feat):
     status = access_status(a)
     if status == CLOSED:
         return None
+    # Vrstvy, kde jen část záznamů je pro turisty (jezdecké kluby: vyjížďky ano, jen ustájení koní ne)
+    if cfg.get("require") and not re.search(cfg["require"], " ".join(str(v) for v in a.values() if v), re.I):
+        return None
 
     text = access_text(a)
     ruin = is_true(a.get("zřícenina")) or name.lower().startswith(("zřícenina", "zbytky", "pozůstatky", "zaniklý"))
@@ -443,6 +459,11 @@ def feature_to_poi(cfg, feat):
     season = parse_season(text)
     if not season and "KOUPALISTE" in tags:
         season = (6, 8)
+    # Výchozí sezóna vrstvy (lyžování v zimě, golf v létě) - pokud záznam neříká, že má provoz celoročně
+    if not season and cfg.get("default_season"):
+        notes = " ".join(str(v) for v in a.values() if v).lower()
+        if not (cfg.get("all_year_if") and re.search(cfg["all_year_if"], notes)):
+            season = cfg["default_season"]
 
     # Prameny v terénu jsou dál od cest
     if a.get("přístupnost") in ("pěšina (pěšky)", "volný terén"):

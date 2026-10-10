@@ -14,7 +14,7 @@ const STEPS = 6;
 const INTERESTS: { value: Category; label: string; hint: string }[] = [
     { value: 'SIGHTSEEING', label: 'Památky', hint: 'hrady, zámky, muzea, rozhledny, prameny' },
     { value: 'PARK', label: 'Příroda', hint: 'přírodní pozoruhodnosti, zahrady, arboreta' },
-    { value: 'FUN', label: 'Zábava a rodina', hint: 'ZOO, aquaparky, lanová centra, farmy' },
+    { value: 'FUN', label: 'Zábava a sport', hint: 'ZOO, aquaparky, lanová centra, golf, lyžování, koně' },
 ];
 const ALL_INTERESTS: Category[] = ['SIGHTSEEING', 'PARK', 'FUN'];
 
