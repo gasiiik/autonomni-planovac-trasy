@@ -111,11 +111,13 @@ export async function planVacation(req: PlanRequest): Promise<Trip> {
             exclude_ids: visited,
             max_stops: req.max_stops_by_day?.[d] ?? null,      // "Vyměnit" - počet zastávek dne zůstane
             only_ids: req.only_ids_by_day?.[d] ?? null,        // "Odebrat" - den jen ze zbylých zastávek
+            swap_id: req.swap_by_day?.[d]?.swap_id ?? null,     // "Vyměnit" v tomto dni
+            keep_ids: req.swap_by_day?.[d]?.keep_ids ?? null,
         });
 
         let nearby: Location[] = [];
         let plan = await generatePlan(dayRequest([]));
-        const limited = req.max_stops_by_day?.[d] != null || req.only_ids_by_day?.[d] != null;
+        const limited = req.max_stops_by_day?.[d] != null || req.only_ids_by_day?.[d] != null || req.swap_by_day?.[d] != null;
         if (!limited && (stopCount(plan) < MIN_STOPS || plan.remaining_free_time_mins > MAX_FREE_MINS)) {
             // Ve vybraných obcích místa došla -> přidáme nejbližší okolní obce
             nearby = locations

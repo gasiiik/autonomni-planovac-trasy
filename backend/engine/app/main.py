@@ -103,7 +103,9 @@ class PlanRequest(BaseModel):
     participants_count: Optional[int] = 1
     has_children: Optional[bool] = False
     exclude_ids: Optional[List[int]] = []  # místa navštívená v předchozích dnech dovolené / vyřazená uživatelem
-    max_stops: Optional[int] = None        # "Vyměnit za jiné místo" = stejný počet zastávek jako předtím
+    max_stops: Optional[int] = None        # nejvýš tolik zastávek
+    swap_id: Optional[int] = None          # "Vyměnit za jiné místo": které místo nahradit...
+    keep_ids: Optional[List[int]] = None   # ...a zastávky současného plánu, které mají zůstat
     only_ids: Optional[List[int]] = None   # "Odebrat zastávku" = plán jen ze zbylých zastávek (nic nového nepřibude)
     area_location_ids: Optional[List[int]] = []  # dovolená: hledat i v okolí dalších obcí (automaticky přidané okolí)
     day_town_ids: Optional[List[int]] = []       # dovolená: další obce, kterými výlet ten den vede (čas dne se rozdělí)
@@ -137,11 +139,17 @@ def in_season(poi, day: datetime) -> bool:
         return poi.season_from <= day.month <= poi.season_to
     return day.month >= poi.season_from or day.month <= poi.season_to  # sezóna přes Nový rok
 
+_weather_cache = {}  # (lat, lng, den) -> (čas stažení, hodinová předpověď)
+
 def get_weather_info(lat: float, lng: float, t_from: datetime, t_to: datetime):
     """Hodinová předpověď z Open-Meteo pro plánovaný den.
     Vrací (stav, {hodina: {"code": WMO kód, "temp": °C}}) - stav je BAD_WEATHER, když prší většinu plánovaného času."""
     try:
         day = t_from.strftime("%Y-%m-%d")
+        key = (round(lat, 2), round(lng, 2), day)
+        cached = _weather_cache.get(key)
+        if cached and (datetime.now() - cached[0]).total_seconds() < 600:
+            return weather_status_for(cached[1], t_from, t_to), cached[1]
         url = (f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lng}"
                f"&hourly=weathercode,temperature_2m&timezone=Europe%2FPrague&start_date={day}&end_date={day}")
         req = urllib.request.Request(url, headers={'User-Agent': 'KrusnoPlan/1.0'})
@@ -153,14 +161,18 @@ def get_weather_info(lat: float, lng: float, t_from: datetime, t_to: datetime):
         for t, code, temp in zip(hourly.get("time", []), hourly.get("weathercode", []), hourly.get("temperature_2m", [])):
             if code is not None:
                 forecast[datetime.fromisoformat(t).hour] = {"code": code, "temp": round(temp) if temp is not None else None}
-        window = [w["code"] for h, w in forecast.items() if t_from.hour <= h <= t_to.hour]
-        if not window:
-            return "UNKNOWN", forecast
-        # WMO Kódy: 50+ znamená déšť, sníh, bouřky. Špatné počasí = prší většinu plánovaného času.
-        bad_hours = sum(1 for c in window if c >= 50)
-        return ("BAD_WEATHER" if bad_hours * 2 >= len(window) else "GOOD_WEATHER"), forecast
+        _weather_cache[key] = (datetime.now(), forecast)
+        return weather_status_for(forecast, t_from, t_to), forecast
     except Exception:
         return "UNKNOWN", {}
+
+def weather_status_for(forecast, t_from: datetime, t_to: datetime) -> str:
+    window = [w["code"] for h, w in forecast.items() if t_from.hour <= h <= t_to.hour]
+    if not window:
+        return "UNKNOWN"
+    # WMO Kódy: 50+ znamená déšť, sníh, bouřky. Špatné počasí = prší většinu plánovaného času.
+    bad_hours = sum(1 for c in window if c >= 50)
+    return "BAD_WEATHER" if bad_hours * 2 >= len(window) else "GOOD_WEATHER"
 
 @app.get("/internal/locations")
 def get_locations(db: Session = Depends(get_db)):
@@ -266,6 +278,44 @@ def dataset_sources(db: Session) -> dict:
 
 @app.post("/internal/planner/generate")
 def generate_plan(req: PlanRequest, db: Session = Depends(get_db)):
+    if req.swap_id is not None and req.keep_ids:
+        return swap_plan(req, db)
+    return build_plan(req, db)
+
+
+def swap_plan(req: PlanRequest, db: Session):
+    """Vyměnit jednu zastávku: ostatní zastávky zůstanou, místo vyměněné se hledá náhrada
+    co nejblíž (přednostně stejného typu), která se do dne vejde."""
+    kept = [i for i in req.keep_ids if i != req.swap_id]
+    excluded = set(req.exclude_ids or []) | {req.swap_id}
+    base = req.model_copy(update={"swap_id": None, "keep_ids": None, "max_stops": None, "exclude_ids": list(excluded)})
+
+    # Kandidáti: místa, která by plánovač ten den sám nabídl (otevřeno, sezóna, náročnost...), mimo současný plán.
+    # U výletu z oblíbených (only_ids) jen z oblíbených.
+    pool = build_plan(base.model_copy(update={"exclude_ids": list(excluded | set(kept))}), db)
+    # Plán bez vyměněného místa: kolik času se uvolnilo (zároveň záloha, když se náhrada nevejde)
+    removed = build_plan(base.model_copy(update={"only_ids": kept}), db)
+    free = removed["remaining_free_time_mins"]
+    alternatives = [i for i in pool["itinerary"] if i["type"] == "poi" and i["duration_mins"] < free]
+    if req.swap_id > 0:
+        old = db.query(ActivityPOI).filter(ActivityPOI.id == req.swap_id).first()
+    else:
+        old = db.query(Restaurant).filter(Restaurant.id == -req.swap_id).first()
+    if old:
+        old_category = getattr(old, "category", "GASTRO")
+        alternatives.sort(key=lambda a: (a["category"] != old_category, haversine_distance(old.lat, old.lng, a["lat"], a["lng"])))
+
+    for alt in alternatives[:10]:
+        plan = build_plan(base.model_copy(update={"only_ids": kept + [alt["poi_id"]]}), db)
+        got = {i["poi_id"] for i in plan["itinerary"] if i["type"] == "poi"}
+        if alt["poi_id"] in got and set(kept) <= got:
+            return plan
+    # Náhrada se nevešla - zastávka se jen odebere
+    removed["message"] = "Náhradu, která by se vešla do dne, jsme nenašli – zastávku jsme jen odebrali. " + removed["message"]
+    return removed
+
+
+def build_plan(req: PlanRequest, db: Session):
     try:
         t_from = datetime.strptime(req.time_from, "%Y-%m-%d %H:%M:%S")
         t_to = datetime.strptime(req.time_to, "%Y-%m-%d %H:%M:%S")

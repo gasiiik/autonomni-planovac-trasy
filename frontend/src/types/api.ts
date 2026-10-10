@@ -23,6 +23,9 @@ export interface PlanRequest {
     max_stops?: number | null;       // "Odebrat zastávku" - plán s menším počtem zastávek
     max_stops_by_day?: (number | null)[];
     only_ids?: number[] | null;
+    swap_id?: number | null;          // "Vyměnit" - které místo nahradit
+    keep_ids?: number[] | null;       // ...a které zastávky zůstanou
+    swap_by_day?: ({ swap_id: number; keep_ids: number[] } | null)[];
     favorite_ids?: number[];          // výlet z oblíbených (jen pro frontend - výměna a obnovení plánu)
     only_ids_by_day?: (number[] | null)[]; // dovolená: max. zastávek pro jednotlivé dny
     area_location_ids?: number[];    // dovolená: hledat i v okolí dalších obcí (automaticky přidané okolí)

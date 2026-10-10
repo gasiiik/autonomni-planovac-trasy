@@ -342,25 +342,28 @@ function ResultView() {
     };
     const stopActions: StopActions | null = request ? {
         // Výměna: místo vyřadíme, počet zastávek zůstane -> plánovač doplní jiné místo
+        // Výměna: ostatní zastávky zůstanou, za vybranou plánovač najde náhradu poblíž
         onSwap: item => {
-            const excluded = [...(request.exclude_ids ?? []), item.poi_id!];
+            const swap = { swap_id: item.poi_id!, keep_ids: currentIds };
+            const excluded = [...(request.exclude_ids ?? []), item.poi_id!];   // vyměněné místo se už nevrátí
             openPlan(request.vacation
-                ? { ...request, exclude_ids: excluded, max_stops_by_day: perDay(request.max_stops_by_day, currentIds.length), only_ids_by_day: perDay(request.only_ids_by_day, null) }
-                : { ...request, exclude_ids: excluded, max_stops: currentIds.length, only_ids: request.favorite_ids ?? null });
+                ? { ...request, exclude_ids: excluded, swap_by_day: perDay(request.swap_by_day, swap), only_ids_by_day: perDay(request.only_ids_by_day, null), max_stops_by_day: perDay(request.max_stops_by_day, null) }
+                : { ...request, ...swap, exclude_ids: excluded, max_stops: null, only_ids: request.favorite_ids ?? null });
         },
         // Odebrání: plán jen ze zbylých zastávek, nic nového se nedoplní (časy se přepočítají)
         onRemove: item => {
             const rest = currentIds.filter(id => id !== item.poi_id);
             if (!rest.length) return;
             openPlan(request.vacation
-                ? { ...request, only_ids_by_day: perDay(request.only_ids_by_day, rest), max_stops_by_day: perDay(request.max_stops_by_day, null) }
-                : { ...request, only_ids: rest, max_stops: null });
+                ? { ...request, only_ids_by_day: perDay(request.only_ids_by_day, rest), max_stops_by_day: perDay(request.max_stops_by_day, null), swap_by_day: perDay(request.swap_by_day, null) }
+                : { ...request, only_ids: rest, max_stops: null, swap_id: null, keep_ids: null });
         },
     } : null;
     const edited = !!request && (!!request.exclude_ids?.length || request.max_stops != null
         || (!!request.only_ids?.length && request.only_ids.length !== request.favorite_ids?.length)
+        || request.swap_id != null || !!request.swap_by_day?.some(n => n != null)
         || !!request.max_stops_by_day?.some(n => n != null) || !!request.only_ids_by_day?.some(n => n != null));
-    const resetEdits = () => request && openPlan({ ...request, exclude_ids: [], max_stops: null, only_ids: request.favorite_ids ?? null, max_stops_by_day: [], only_ids_by_day: [] });
+    const resetEdits = () => request && openPlan({ ...request, exclude_ids: [], max_stops: null, only_ids: request.favorite_ids ?? null, swap_id: null, keep_ids: null, max_stops_by_day: [], only_ids_by_day: [], swap_by_day: [] });
 
     const chooseStay = (stay: Stay, a: AccommodationOption | null) => {
         if (!request?.vacation) return;
