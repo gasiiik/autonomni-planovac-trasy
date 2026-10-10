@@ -29,7 +29,7 @@ KrušnoPlán z otevřených dat Karlovarského kraje sestaví výlet nebo celou 
 frontend (React, :5173) → PHP gateway (:8080) → Python engine (FastAPI, :8000) → MariaDB
                                                        ↑
                      import_datazapad.py ← DataZápad (ArcGIS REST API)
-                     import_ubytovani.py ← OpenStreetMap (Overpass API)
+                     import_ubytovani.py, import_restaurace.py ← OpenStreetMap (Overpass API)
 ```
 
 ## Použitá data
@@ -65,6 +65,7 @@ frontend (React, :5173) → PHP gateway (:8080) → Python engine (FastAPI, :800
 \* Sada UNESCO obsahuje hlavně celoplošné položky (lázeňská města, hornická krajina, geopark), které nejsou zastávkou na trase. Jediný bodový objekt (Kynžvartská daguerrotypie) se sloučil se záznamem Zámku Kynžvart.
 
 **Doplňkové zdroje** (DataZápad je nemá, plánovač je jen doplňují):
+- Restaurace, kavárny a hospody pro zastávku na oběd: [OpenStreetMap](https://www.openstreetmap.org/copyright), ODbL – DataZápad z gastronomie obsahuje jen pivovary. Podniky jsou uložené zvlášť (ne mezi turistickými cíli), plánovač čte jejich otevírací dobu podle dne v týdnu a vynechává kavárny čerpacích stanic. Na mapě míst jsou jako vypínatelná vrstva.
 - Ubytování pro plánovač dovolené: [OpenStreetMap](https://www.openstreetmap.org/copyright) přes Overpass API, ODbL – hotely, penziony, apartmány, chaty a kempy (DataZápad obsahuje o ubytování jen souhrnné statistiky).
 - Předpověď počasí: [Open-Meteo](https://open-meteo.com/), CC BY 4.0.
 - Fotky míst: [Wikipedie](https://cs.wikipedia.org/), [Wikimedia Commons](https://commons.wikimedia.org/) a [Wikidata](https://www.wikidata.org/) – odkazujeme na náhledy, licence podle jednotlivých souborů (většinou CC BY-SA). Fotka se přiřadí jen při shodě názvu a polohy. Když tam fotka není, použije se náhledový obrázek z oficiálního webu místa uvedeného v DataZápadu – patří provozovateli webu a u fotky je uveden zdroj.
@@ -85,7 +86,7 @@ cd backend
 docker compose up -d --build
 ```
 
-Data z DataZápadu i ubytování z OpenStreetMap se stáhnou **automaticky** při startu enginu – při prvním spuštění (cca 10 minut včetně fotek) a pak vždy, když jsou starší než 7 dní (`AUTO_IMPORT_MAX_AGE_DAYS` v `docker-compose.yml`, vypnutí `AUTO_IMPORT=0`). Aplikace mezitím běží, průběh uvidíte v `docker compose logs -f python_engine`.
+Data z DataZápadu i ubytování a restaurace z OpenStreetMap se stáhnou **automaticky** při startu enginu – při prvním spuštění (cca 10 minut včetně fotek) a pak vždy, když jsou starší než 7 dní (`AUTO_IMPORT_MAX_AGE_DAYS` v `docker-compose.yml`, vypnutí `AUTO_IMPORT=0`). Aplikace mezitím běží, průběh uvidíte v `docker compose logs -f python_engine`.
 
 Ruční spuštění importu:
 ```bash

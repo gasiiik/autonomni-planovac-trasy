@@ -14,7 +14,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import func, text
 
 from .database import SessionLocal, engine
-from .models import Accommodation, Dataset
+from .models import Accommodation, Dataset, Restaurant
 
 MAX_AGE_DAYS = int(os.getenv("AUTO_IMPORT_MAX_AGE_DAYS", "7"))
 
@@ -48,17 +48,26 @@ def _run():
         return
     Dataset.__table__.create(bind=engine, checkfirst=True)
     Accommodation.__table__.create(bind=engine, checkfirst=True)
+    Restaurant.__table__.create(bind=engine, checkfirst=True)
 
     # Ubytování z OpenStreetMap (pro dovolenou) - stačí jednou, když v DB ještě žádné není
     db = SessionLocal()
     try:
         has_stays = db.query(Accommodation).first() is not None
+        has_food = db.query(Restaurant).first() is not None
     finally:
         db.close()
     if not has_stays:
         try:
             from scripts.import_ubytovani import run_import as import_stays
             import_stays()
+        except Exception:
+            traceback.print_exc()
+    # Restaurace a kavárny z OpenStreetMap (zastávka na oběd) - stačí jednou
+    if not has_food:
+        try:
+            from scripts.import_restaurace import run_import as import_food
+            import_food()
         except Exception:
             traceback.print_exc()
 

@@ -2,8 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import type { Category, Place } from '../types/api';
-import { fetchPlaces } from '../services/apiClient';
+import type { Category, FoodPlace, Place } from '../types/api';
+import { fetchPlaces, fetchRestaurants } from '../services/apiClient';
 import { CATEGORY_COLORS, CATEGORY_LABELS } from '../constants';
 
 const CATEGORIES: Category[] = ['SIGHTSEEING', 'PARK', 'FUN', 'GASTRO'];
@@ -19,6 +19,9 @@ export default function MapPage() {
     const [freeOnly, setFreeOnly] = useState(false);
     const [indoorOnly, setIndoorOnly] = useState(false);
     const [query, setQuery] = useState('');
+    const [showFood, setShowFood] = useState(false);          // vrstva restaurací (OpenStreetMap), ve výchozím stavu vypnutá
+    const [food, setFood] = useState<FoodPlace[] | null>(null);
+    const foodLayerRef = useRef<L.LayerGroup | null>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const mapRef = useRef<L.Map | null>(null);
     const layerRef = useRef<L.LayerGroup | null>(null);
@@ -44,6 +47,7 @@ export default function MapPage() {
             maxZoom: 18,
             attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
         }).addTo(map);
+        foodLayerRef.current = L.layerGroup().addTo(map);  // pod turistickými cíli
         layerRef.current = L.layerGroup().addTo(map);
         mapRef.current = map;
 
@@ -75,6 +79,36 @@ export default function MapPage() {
         });
     }, [filtered]);
 
+    // Restaurace se načtou až při prvním zapnutí vrstvy
+    const toggleFood = () => {
+        setShowFood(v => !v);
+        if (food === null) fetchRestaurants().then(setFood).catch(err => setError(err.message));
+    };
+
+    const filteredFood = useMemo(() => {
+        if (!showFood || !food) return [];
+        const q = query.trim().toLowerCase();
+        return q ? food.filter(f => f.name.toLowerCase().includes(q)) : food;
+    }, [food, showFood, query]);
+
+    useEffect(() => {
+        const layer = foodLayerRef.current;
+        if (!layer) return;
+        layer.clearLayers();
+        filteredFood.forEach(f => {
+            const details = [f.kind_label, f.cuisine ? f.cuisine.replace(/;/g, ', ').replace(/_/g, ' ') : null, f.vegetarian ? 'vegetariánské' : null]
+                .filter(Boolean).join(' · ');
+            L.circleMarker([f.lat, f.lng], { radius: 5, color: '#7F1D1D', weight: 1.5, fillColor: '#FCA5A5', fillOpacity: 0.95 })
+                .bindPopup(`<div style="font-size:12px;color:#666">${escapeHtml(details)}</div>
+                    <strong style="font-size:14px">${escapeHtml(f.name)}</strong><br>
+                    ${f.address ? `<span style="font-size:12px">${escapeHtml(f.address)}</span><br>` : ''}
+                    ${f.opening_hours ? `<span style="font-size:12px">Otevřeno: ${escapeHtml(f.opening_hours)}</span><br>` : ''}
+                    ${f.website ? `<a href="${escapeHtml(f.website)}" target="_blank" rel="noopener noreferrer" style="color:#087F78;font-weight:600">Web</a><br>` : ''}
+                    <span style="font-size:11px;color:#999">Zdroj: OpenStreetMap</span>`)
+                .addTo(layer);
+        });
+    }, [filteredFood]);
+
     const toggleCategory = (c: Category) =>
         setCategories(prev => prev.includes(c) ? prev.filter(x => x !== c) : [...prev, c]);
 
@@ -95,12 +129,19 @@ export default function MapPage() {
                 ))}
                 <button onClick={() => setFreeOnly(v => !v)} className={chip(freeOnly)}>Zdarma</button>
                 <button onClick={() => setIndoorOnly(v => !v)} className={chip(indoorOnly)}>Uvnitř (při dešti)</button>
+                <button onClick={toggleFood} className={chip(showFood)} title="Restaurace, kavárny a hospody z OpenStreetMap">
+                    <span className="inline-block w-2.5 h-2.5 rounded-full mr-2 align-middle border border-red-900" style={{ background: '#FCA5A5' }} />
+                    Restaurace a kavárny
+                </button>
                 <input type="search" value={query} onChange={e => setQuery(e.target.value)} placeholder="Hledat místo…"
                     className="flex-1 min-w-[180px] border border-gray-300 rounded-full px-4 py-2 focus:outline-none focus:ring-2 focus:ring-primary" />
             </div>
 
             {error && <p className="bg-red-100 text-red-700 p-3 rounded-xl mb-4">{error}</p>}
-            <p className="text-sm text-gray-500 mb-2">Zobrazeno {filtered.length} z {places.length} míst</p>
+            <p className="text-sm text-gray-500 mb-2">
+                Zobrazeno {filtered.length} z {places.length} míst
+                {showFood && (food ? ` + ${filteredFood.length} restaurací a kaváren (OpenStreetMap)` : ' + načítám restaurace…')}
+            </p>
 
             <div className="rounded-3xl overflow-hidden shadow-lg border border-secondary h-[70vh] relative z-0">
                 <div ref={containerRef} className="w-full h-full" />

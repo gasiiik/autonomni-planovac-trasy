@@ -33,11 +33,13 @@ SERVERS = ["https://overpass-api.de/api/interpreter", "https://overpass.private.
 TILES = [(49.85, 12.08, 50.16, 12.70), (49.85, 12.70, 50.16, 13.32),
          (50.16, 12.08, 50.47, 12.70), (50.16, 12.70, 50.47, 13.32)]
 KINDS = "hotel|guest_house|hostel|motel|camp_site|chalet|apartment"
+ACCOMMODATION_FILTER = f'["tourism"~"^({KINDS})$"]'
 
 
-def fetch_tile(tile):
+def fetch_tile(tile, osm_filter=ACCOMMODATION_FILTER):
+    """Objekty OpenStreetMap v obdélníku (filtr tagů např. '["amenity"~"^(restaurant|cafe)$"]')."""
     s, w, n, e = tile
-    query = f'[out:json][timeout:60];nwr({s},{w},{n},{e})["tourism"~"^({KINDS})$"]["name"];out center tags;'
+    query = f'[out:json][timeout:60];nwr({s},{w},{n},{e}){osm_filter}["name"];out center tags;'
     for attempt in range(6):
         server = SERVERS[attempt % len(SERVERS)]
         try:

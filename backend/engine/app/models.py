@@ -56,6 +56,22 @@ class Accommodation(Base):
     address = Column(String(255))
 
 
+class Restaurant(Base):
+    """Restaurace, kavárny a hospody z OpenStreetMap - jen pro zastávku na jídlo (DataZápad má jen pivovary)."""
+    __tablename__ = "restaurants"
+    id = Column(Integer, primary_key=True, index=True)
+    osm_id = Column(String(40), unique=True)
+    name = Column(String(200))
+    kind = Column(String(20))                # restaurant, cafe, pub, biergarten
+    lat = Column(Float)
+    lng = Column(Float)
+    cuisine = Column(String(100))
+    opening_hours = Column(String(255))      # původní zápis z OpenStreetMap
+    website = Column(String(255))
+    address = Column(String(255))
+    vegetarian = Column(Integer, default=0)
+
+
 class Dataset(Base):
     """Metadata datové sady z DataZápad - pro uvedení zdroje u míst a počítadlo dat."""
     __tablename__ = "datasets"

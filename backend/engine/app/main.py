@@ -11,7 +11,8 @@ import urllib.request
 import json
 
 from .database import get_db
-from .models import Location, ActivityPOI, Dataset, Accommodation
+from .models import Location, ActivityPOI, Dataset, Accommodation, Restaurant
+from .opening_hours import hours_for_day
 from . import auto_import
 
 @asynccontextmanager
@@ -27,6 +28,50 @@ LOCAL_TZ = ZoneInfo("Europe/Prague")
 # Denní doba návštěv - ani nonstop přístupná místa (prameny, zříceniny, příroda) neplánujeme v noci
 VISIT_FROM = (7, 0)
 VISIT_TO = (21, 0)
+
+# Jídlo za den nejvýš 2× (oběd + případně kavárna odpoledne)
+MAX_MEALS = 2
+
+# Restaurace z OpenStreetMap: běžná otevírací doba, délka a útrata podle typu, když OSM dobu neuvádí
+FOOD_DEFAULTS = {
+    "restaurant": ("11:00", "21:00", 60, 250, "Restaurace"),
+    "cafe": ("09:00", "18:00", 40, 120, "Kavárna"),
+    "pub": ("11:00", "22:00", 60, 200, "Hospoda"),
+    "biergarten": ("11:00", "21:00", 60, 200, "Pivní zahrádka"),
+}
+OSM_SOURCE = {"name": "OpenStreetMap", "url": "https://www.openstreetmap.org/copyright", "license": "ODbL"}
+
+def restaurants_nearby(db, centers, radius_km, day, excluded, existing):
+    """Restaurace v dosahu jako místa pro plánovač (id záporné, aby se nepletly s turistickými cíli).
+    Vynechá podniky, které mají ten den zavřeno, a ty, co už jsou v datech (např. Grandhotel Pupp)."""
+    try:
+        rows = db.query(Restaurant).all()
+    except Exception:
+        db.rollback()
+        return []
+    gastro = [p for p in existing if p.category == "GASTRO"]
+    out = []
+    for r in rows:
+        if -r.id in excluded or not any(haversine_distance(c[0], c[1], r.lat, r.lng) <= radius_km for c in centers):
+            continue
+        if any(haversine_distance(g.lat, g.lng, r.lat, r.lng) < 0.08 for g in gastro):
+            continue  # stejný podnik už máme (pivovar, ručně zadané místo)
+        open_t, close_t, duration, price, label = FOOD_DEFAULTS.get(r.kind, FOOD_DEFAULTS["restaurant"])
+        hours = hours_for_day(r.opening_hours, day.weekday())
+        if hours == "closed":
+            continue
+        if hours:
+            open_t, close_t = hours
+        tags = ["CAFE" if r.kind == "cafe" else "RESTAURACE"] + (["VEGETARIAN"] if r.vegetarian else [])
+        cuisine = f" · kuchyně: {r.cuisine.replace(';', ', ')}" if r.cuisine else ""
+        out.append(SimpleNamespace(
+            id=-r.id, name=r.name, category="GASTRO", lat=r.lat, lng=r.lng, est_duration_mins=duration,
+            open_time=open_t, close_time=close_t, price_estimated=price, tags=",".join(tags),
+            family_friendly=1, difficulty_level="EASY", indoor=1, season_from=None, season_to=None,
+            image_url=None, address=r.address, website=r.website, source="OSM", external_id=None,
+            description=f"{label}{cuisine}." + ("" if r.opening_hours else " Otevírací dobu si raději ověř."),
+        ))
+    return out
 
 # Nejdéle kolik minut jsme ochotni čekat před místem na otevření
 MAX_WAIT_MINS = 60
@@ -176,6 +221,20 @@ ACCOMMODATION_KINDS = {
     "hostel": "Hostel", "motel": "Motel", "camp_site": "Kemp",
 }
 
+@app.get("/internal/restaurants")
+def get_restaurants(db: Session = Depends(get_db)):
+    """Restaurace, kavárny a hospody z OpenStreetMap pro vrstvu na mapě míst."""
+    try:
+        rows = db.query(Restaurant).all()
+    except Exception:
+        db.rollback()
+        return []
+    return [{
+        "id": r.id, "name": r.name, "kind": r.kind, "kind_label": FOOD_DEFAULTS.get(r.kind, FOOD_DEFAULTS["restaurant"])[4],
+        "lat": r.lat, "lng": r.lng, "cuisine": r.cuisine, "opening_hours": r.opening_hours,
+        "website": r.website, "address": r.address, "vegetarian": bool(r.vegetarian),
+    } for r in rows]
+
 @app.get("/internal/accommodation")
 def get_accommodation(lat: float, lng: float, limit: int = 6, radius_km: float = 8.0, db: Session = Depends(get_db)):
     """Nejbližší ubytování k místu (OpenStreetMap). Přednost mají ta s webem a hvězdičkami."""
@@ -246,6 +305,10 @@ def generate_plan(req: PlanRequest, db: Session = Depends(get_db)):
     centers = day_towns + town_centers(req.area_location_ids or [])
     pois = [p for p in candidates
             if p.id not in excluded and any(haversine_distance(c[0], c[1], p.lat, p.lng) <= radius_km for c in centers)]
+    # Jídlo: DataZápad má jen pivovary -> doplníme restaurace a kavárny z OpenStreetMap
+    if "GASTRO" in req.interests:
+        pois += restaurants_nearby(db, centers, radius_km, t_from, excluded, pois)
+
     # Sezónní místa (lanová centra, koupaliště, rozhledny) mimo sezónu vyřadíme
     out_of_season = [p for p in pois if not in_season(p, t_from)]
     pois = [p for p in pois if in_season(p, t_from)]
@@ -287,6 +350,7 @@ def generate_plan(req: PlanRequest, db: Session = Depends(get_db)):
     skip_reasons = set() # Důvody, proč byla místa vyřazena (pro srozumitelnou hlášku)
     last_category = None
     had_lunch = False
+    meals = 0 # kolik jídel už v plánu je
     last_meal_end = None # konec posledního jídla - další gastro zastávka nejdřív za 3 hodiny
     type_counts = {} # kolik míst daného typu už v plánu je
 
@@ -336,7 +400,8 @@ def generate_plan(req: PlanRequest, db: Session = Depends(get_db)):
             # 3. Zohlednění nových SOČ parametrů
             price = p.price_estimated or 0
             # a) Peníze
-            if not req.willing_to_pay_entry and price > 0:
+            # "Jen zdarma" se týká vstupného, ne jídla
+            if not req.willing_to_pay_entry and price > 0 and p.category != "GASTRO":
                 skip_reasons.add("placené vstupné")
                 continue
             if req.budget_max is not None and (total_estimated_cost + price) > req.budget_max:
@@ -379,6 +444,8 @@ def generate_plan(req: PlanRequest, db: Session = Depends(get_db)):
         #    a) mezi 11:30 a 14:00 upřednostníme oběd (pokud uživatel chce Gastro)
         #    b) dvě gastro zastávky nikdy neplánujeme hned po sobě a další jídlo nejdřív za 3 hodiny
         if last_meal_end and current_time - last_meal_end < timedelta(hours=3):
+            feasible = [fp for fp in feasible if fp[2].category != "GASTRO"]
+        if meals >= MAX_MEALS:
             feasible = [fp for fp in feasible if fp[2].category != "GASTRO"]
         wait_mins = 0
         if feasible:
@@ -476,7 +543,7 @@ def generate_plan(req: PlanRequest, db: Session = Depends(get_db)):
                 "address": poi.address,
                 "website": poi.website,
                 "description": poi.description,
-                "source": sources.get((poi.external_id or "").split(":")[0]) if poi.source == "DATAZAPAD" else None,
+                "source": OSM_SOURCE if poi.source == "OSM" else (sources.get((poi.external_id or "").split(":")[0]) if poi.source == "DATAZAPAD" else None),
                 "weather": forecast.get(current_time.hour), # předpověď na začátek návštěvy
                 "poi_id": poi.id,
                 "indoor": bool(poi.indoor),
@@ -492,6 +559,7 @@ def generate_plan(req: PlanRequest, db: Session = Depends(get_db)):
             type_counts[poi_type(poi)] = type_counts.get(poi_type(poi), 0) + 1
             if poi.category == "GASTRO":
                 had_lunch = True
+                meals += 1
                 last_meal_end = current_time
             curr_lat, curr_lng = poi.lat, poi.lng
 

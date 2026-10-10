@@ -52,6 +52,20 @@ CREATE TABLE IF NOT EXISTS accommodations (
     address VARCHAR(255)
 );
 
+CREATE TABLE IF NOT EXISTS restaurants (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    osm_id VARCHAR(40) UNIQUE,                -- OpenStreetMap
+    name VARCHAR(200),
+    kind VARCHAR(20),                         -- restaurant, cafe, pub, biergarten
+    lat FLOAT,
+    lng FLOAT,
+    cuisine VARCHAR(100),
+    opening_hours VARCHAR(255),
+    website VARCHAR(255),
+    address VARCHAR(255),
+    vegetarian TINYINT(1) DEFAULT 0
+);
+
 CREATE TABLE IF NOT EXISTS datasets (
     service VARCHAR(150) PRIMARY KEY,         -- název ArcGIS služby = prefix activity_pois.external_id
     title VARCHAR(255),

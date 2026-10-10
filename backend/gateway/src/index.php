@@ -125,6 +125,11 @@ if ($request_uri === '/api/locations' && $method === 'GET') {
     forward_to_engine('/internal/locations');
 }
 
+// Restaurace a kavárny (OpenStreetMap) pro vrstvu na mapě míst
+if ($request_uri === '/api/restaurants' && $method === 'GET') {
+    forward_to_engine('/internal/restaurants');
+}
+
 // Ubytování v okolí (dovolená) - parametry lat, lng, limit
 if ($request_uri === '/api/accommodation' && $method === 'GET') {
     forward_to_engine('/internal/accommodation?' . http_build_query([

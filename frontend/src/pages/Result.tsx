@@ -100,7 +100,7 @@ function PoiItem({ item, order, transport }: { item: ItineraryItem; order: numbe
             {item.address && <p className="text-sm text-gray-600 mb-2 flex items-start gap-1.5"><MapPin size={16} className="text-primary mt-0.5 shrink-0" aria-hidden="true" /> {item.address}</p>}
             {item.description && <p className="text-sm text-gray-700 line-clamp-3">{item.description}</p>}
             <div className="flex flex-wrap gap-x-4 gap-y-1 mt-3 text-sm font-semibold print:hidden">
-                {item.poi_id && <Link to={`/misto/${item.poi_id}`} className="text-primary underline">Detail</Link>}
+                {item.poi_id != null && item.poi_id > 0 && <Link to={`/misto/${item.poi_id}`} className="text-primary underline">Detail</Link>}
                 {item.lat != null && item.lng != null && (
                     <span className="inline-flex items-center gap-x-2 text-gray-500 font-normal">
                         <Navigation size={14} className="text-primary" aria-hidden="true" /> Navigovat:

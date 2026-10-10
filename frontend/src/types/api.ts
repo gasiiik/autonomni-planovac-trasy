@@ -31,6 +31,21 @@ export interface VacationRequest {
     daily_from?: string;   // "HH:MM:SS" - od kdy se plánuje 2. a další dny
 }
 
+// Restaurace, kavárny a hospody z OpenStreetMap (vrstva na mapě míst)
+export interface FoodPlace {
+    id: number;
+    name: string;
+    kind: string;
+    kind_label: string;
+    lat: number;
+    lng: number;
+    cuisine: string | null;
+    opening_hours: string | null;
+    website: string | null;
+    address: string | null;
+    vegetarian: boolean;
+}
+
 export interface AccommodationOption {
     id: number;
     name: string;
