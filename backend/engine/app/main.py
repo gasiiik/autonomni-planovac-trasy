@@ -106,6 +106,7 @@ class PlanRequest(BaseModel):
     max_stops: Optional[int] = None        # nejvýš tolik zastávek
     swap_id: Optional[int] = None          # "Vyměnit za jiné místo": které místo nahradit...
     keep_ids: Optional[List[int]] = None   # ...a zastávky současného plánu, které mají zůstat
+    order_ids: Optional[List[int]] = None  # úprava plánu: zastávky v tomto pořadí (co nestihneme, přeskočíme)
     only_ids: Optional[List[int]] = None   # "Odebrat zastávku" = plán jen ze zbylých zastávek (nic nového nepřibude)
     area_location_ids: Optional[List[int]] = []  # dovolená: hledat i v okolí dalších obcí (automaticky přidané okolí)
     day_town_ids: Optional[List[int]] = []       # dovolená: další obce, kterými výlet ten den vede (čas dne se rozdělí)
@@ -283,35 +284,60 @@ def generate_plan(req: PlanRequest, db: Session = Depends(get_db)):
     return build_plan(req, db)
 
 
+SWAP_NEARBY_KM = 3.0  # náhrada za vyměněné místo: kandidáti i z okolí tohoto místa
+
 def swap_plan(req: PlanRequest, db: Session):
     """Vyměnit jednu zastávku: ostatní zastávky zůstanou, místo vyměněné se hledá náhrada
     co nejblíž (přednostně stejného typu), která se do dne vejde."""
     kept = [i for i in req.keep_ids if i != req.swap_id]
     excluded = set(req.exclude_ids or []) | {req.swap_id}
     base = req.model_copy(update={"swap_id": None, "keep_ids": None, "max_stops": None, "exclude_ids": list(excluded)})
+    taken = excluded | set(kept)
 
-    # Kandidáti: místa, která by plánovač ten den sám nabídl (otevřeno, sezóna, náročnost...), mimo současný plán.
-    # U výletu z oblíbených (only_ids) jen z oblíbených.
-    pool = build_plan(base.model_copy(update={"exclude_ids": list(excluded | set(kept))}), db)
-    # Plán bez vyměněného místa: kolik času se uvolnilo (zároveň záloha, když se náhrada nevejde)
-    removed = build_plan(base.model_copy(update={"only_ids": kept}), db)
-    free = removed["remaining_free_time_mins"]
-    alternatives = [i for i in pool["itinerary"] if i["type"] == "poi" and i["duration_mins"] < free]
     if req.swap_id > 0:
         old = db.query(ActivityPOI).filter(ActivityPOI.id == req.swap_id).first()
     else:
         old = db.query(Restaurant).filter(Restaurant.id == -req.swap_id).first()
-    if old:
-        old_category = getattr(old, "category", "GASTRO")
-        alternatives.sort(key=lambda a: (a["category"] != old_category, haversine_distance(old.lat, old.lng, a["lat"], a["lng"])))
+    old_category = getattr(old, "category", "GASTRO") if old else None
 
-    for alt in alternatives[:10]:
-        plan = build_plan(base.model_copy(update={"only_ids": kept + [alt["poi_id"]]}), db)
-        got = {i["poi_id"] for i in plan["itinerary"] if i["type"] == "poi"}
-        if alt["poi_id"] in got and set(kept) <= got:
-            return plan
-    # Náhrada se nevešla - zastávka se jen odebere
-    removed["message"] = "Náhradu, která by se vešla do dne, jsme nenašli – zastávku jsme jen odebrali. " + removed["message"]
+    # Plán bez vyměněného místa: kolik času se uvolnilo (zároveň záloha, když se náhrada nevejde)
+    removed = build_plan(base.model_copy(update={"only_ids": kept, "order_ids": kept}), db)
+    free = removed["remaining_free_time_mins"]
+
+    # Kandidáti: id -> (kategorie, lat, lng, délka návštěvy)
+    # 1) místa, která by plánovač ten den sám nabídl (otevřeno, sezóna, náročnost...), mimo současný plán
+    pool = build_plan(base.model_copy(update={"exclude_ids": list(taken)}), db)
+    cands = {i["poi_id"]: (i["category"], i["lat"], i["lng"], i["duration_mins"])
+             for i in pool["itinerary"] if i["type"] == "poi"}
+    # 2) místa v okolí vyměněného místa (filtry - otevírací doba, náročnost... - ověří build_plan)
+    if old:
+        for p in db.query(ActivityPOI).filter(ActivityPOI.category.in_(req.interests)).all():
+            if p.id not in taken and haversine_distance(old.lat, old.lng, p.lat, p.lng) <= SWAP_NEARBY_KM:
+                cands.setdefault(p.id, (p.category, p.lat, p.lng, p.est_duration_mins or 60))
+        # 3) za jídlo i ostatní restaurace a kavárny v okolí (OpenStreetMap)
+        if old_category == "GASTRO" and "GASTRO" in req.interests:
+            day = datetime.strptime(req.time_from, "%Y-%m-%d %H:%M:%S")
+            for f in restaurants_nearby(db, [(old.lat, old.lng)], SWAP_NEARBY_KM, day, taken, []):
+                cands.setdefault(f.id, ("GASTRO", f.lat, f.lng, f.est_duration_mins))
+    if req.only_ids:  # výlet z oblíbených - náhrada jen z oblíbených
+        cands = {k: v for k, v in cands.items() if k in set(req.only_ids)}
+
+    alternatives = [(k, v) for k, v in cands.items() if v[3] < free]
+    if old:
+        alternatives.sort(key=lambda kv: (kv[1][0] != old_category, haversine_distance(old.lat, old.lng, kv[1][1], kv[1][2])))
+
+    # Náhradu vložíme na místo vyměněné zastávky, ostatní zastávky zůstanou v pořadí
+    pos = req.keep_ids.index(req.swap_id) if req.swap_id in req.keep_ids else len(kept)
+    for alt_id, _ in alternatives[:15]:
+        order = kept[:pos] + [alt_id] + kept[pos:]
+        for attempt in (order, None):   # nejdřív v pořadí, pak nechat plánovač seřadit sám
+            plan = build_plan(base.model_copy(update={"only_ids": kept + [alt_id], "order_ids": attempt}), db)
+            got = {i["poi_id"] for i in plan["itinerary"] if i["type"] == "poi"}
+            if alt_id in got and set(kept) <= got:
+                return plan
+    # Náhrada se nevešla - zastávka se jen odebere a plán to řekne
+    name = getattr(old, "name", None)
+    removed["notice"] = (f"Za „{name}“ jsme nenašli náhradu, " if name else "Náhradu jsme nenašli, ") +         "která by se ještě vešla do dne – zastávku jsme proto jen odebrali."
     return removed
 
 
@@ -426,7 +452,8 @@ def build_plan(req: PlanRequest, db: Session):
 
         for p in unvisited:
             # 1b. Rozmanitost - stejného typu nejvýš MAX_SAME_TYPE míst
-            if p.category != "GASTRO" and type_counts.get(poi_type(p), 0) >= MAX_SAME_TYPE:
+            #     (neplatí pro ručně upravený plán - zastávky si vybral uživatel)
+            if not req.order_ids and p.category != "GASTRO" and type_counts.get(poi_type(p), 0) >= MAX_SAME_TYPE:
                 continue
 
             # 2. Zohlednění otevírací doby (Opening Hours)
@@ -511,7 +538,11 @@ def build_plan(req: PlanRequest, db: Session):
         if meals >= MAX_MEALS:
             feasible = [fp for fp in feasible if fp[2].category != "GASTRO"]
         wait_mins = 0
-        if feasible:
+        if req.order_ids and feasible:
+            # Upravený plán (výměna, odebrání): držíme původní pořadí zastávek
+            rank = {pid: k for k, pid in enumerate(req.order_ids)}
+            _, min_dist, closest_poi, wait_mins = min(feasible, key=lambda fp: rank.get(fp[2].id, len(rank)))
+        elif feasible:
             lunch_window = current_time.replace(hour=11, minute=30) <= current_time <= current_time.replace(hour=14, minute=0)
             gastro = [fp for fp in feasible if fp[2].category == "GASTRO"]
             other = [fp for fp in feasible if fp[2].category != "GASTRO"]

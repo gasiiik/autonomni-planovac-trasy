@@ -25,6 +25,7 @@ export interface PlanRequest {
     only_ids?: number[] | null;
     swap_id?: number | null;          // "Vyměnit" - které místo nahradit
     keep_ids?: number[] | null;       // ...a které zastávky zůstanou
+    order_ids?: number[] | null;      // "Odebrat" - zastávky zůstanou v původním pořadí
     swap_by_day?: ({ swap_id: number; keep_ids: number[] } | null)[];
     favorite_ids?: number[];          // výlet z oblíbených (jen pro frontend - výměna a obnovení plánu)
     only_ids_by_day?: (number[] | null)[]; // dovolená: max. zastávek pro jednotlivé dny
@@ -159,6 +160,7 @@ export interface PlanResponse {
     total_planned_time: number;
     total_estimated_cost: number;
     participants?: number;
+    notice?: string;                  // např. za vyměněné místo se nenašla náhrada
 }
 
 export interface DatasetInfo {

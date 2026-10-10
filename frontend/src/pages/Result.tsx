@@ -3,7 +3,7 @@ import { flushSync } from 'react-dom';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import type { AccommodationOption, ChosenStay, ItineraryItem, PlanRequest, PlanResponse } from '../types/api';
 import { generatePlan } from '../services/apiClient';
-import { BedDouble, CalendarDays, CalendarPlus, Check, Clock, CloudRain, CloudSun, ExternalLink, MapPin, Navigation, Printer, RefreshCw, RotateCcw, Share2, Sun, Trash2 } from 'lucide-react';
+import { BedDouble, CalendarDays, CalendarPlus, Check, Clock, CloudRain, CloudSun, ExternalLink, Info, MapPin, Navigation, Printer, RefreshCw, RotateCcw, Share2, Sun, Trash2 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { CATEGORY_LABELS, DAY_COLORS, TRANSPORT_LABELS } from '../constants';
 import { CategoryTag, TransportIcon, WeatherIcon } from '../components/Icons';
@@ -348,7 +348,7 @@ function ResultView() {
             const excluded = [...(request.exclude_ids ?? []), item.poi_id!];   // vyměněné místo se už nevrátí
             openPlan(request.vacation
                 ? { ...request, exclude_ids: excluded, swap_by_day: perDay(request.swap_by_day, swap), only_ids_by_day: perDay(request.only_ids_by_day, null), max_stops_by_day: perDay(request.max_stops_by_day, null) }
-                : { ...request, ...swap, exclude_ids: excluded, max_stops: null, only_ids: request.favorite_ids ?? null });
+                : { ...request, ...swap, exclude_ids: excluded, max_stops: null, order_ids: null, only_ids: request.favorite_ids ?? null });
         },
         // Odebrání: plán jen ze zbylých zastávek, nic nového se nedoplní (časy se přepočítají)
         onRemove: item => {
@@ -356,14 +356,14 @@ function ResultView() {
             if (!rest.length) return;
             openPlan(request.vacation
                 ? { ...request, only_ids_by_day: perDay(request.only_ids_by_day, rest), max_stops_by_day: perDay(request.max_stops_by_day, null), swap_by_day: perDay(request.swap_by_day, null) }
-                : { ...request, only_ids: rest, max_stops: null, swap_id: null, keep_ids: null });
+                : { ...request, only_ids: rest, order_ids: rest, max_stops: null, swap_id: null, keep_ids: null });
         },
     } : null;
     const edited = !!request && (!!request.exclude_ids?.length || request.max_stops != null
         || (!!request.only_ids?.length && request.only_ids.length !== request.favorite_ids?.length)
         || request.swap_id != null || !!request.swap_by_day?.some(n => n != null)
         || !!request.max_stops_by_day?.some(n => n != null) || !!request.only_ids_by_day?.some(n => n != null));
-    const resetEdits = () => request && openPlan({ ...request, exclude_ids: [], max_stops: null, only_ids: request.favorite_ids ?? null, swap_id: null, keep_ids: null, max_stops_by_day: [], only_ids_by_day: [], swap_by_day: [] });
+    const resetEdits = () => request && openPlan({ ...request, exclude_ids: [], max_stops: null, only_ids: request.favorite_ids ?? null, order_ids: null, swap_id: null, keep_ids: null, max_stops_by_day: [], only_ids_by_day: [], swap_by_day: [] });
 
     const chooseStay = (stay: Stay, a: AccommodationOption | null) => {
         if (!request?.vacation) return;
@@ -473,6 +473,12 @@ function ResultView() {
                         <span>{result.message}</span>
                     </div>
 
+                    {result.notice && (
+                        <div className="bg-amber-50 border border-amber-200 text-amber-900 p-4 rounded-xl mb-4 flex items-start gap-3 print:hidden">
+                            <Info size={20} className="shrink-0 mt-0.5" aria-hidden="true" />
+                            <span>{result.notice}</span>
+                        </div>
+                    )}
                     {result.empty_reason ? (
                         <div className="bg-amber-50 border border-amber-200 text-amber-900 p-6 rounded-xl mb-6">
                             <p className="font-semibold mb-2">Výlet se nepodařilo naplánovat</p>

@@ -111,6 +111,7 @@ export async function planVacation(req: PlanRequest): Promise<Trip> {
             exclude_ids: visited,
             max_stops: req.max_stops_by_day?.[d] ?? null,      // "Vyměnit" - počet zastávek dne zůstane
             only_ids: req.only_ids_by_day?.[d] ?? null,        // "Odebrat" - den jen ze zbylých zastávek
+            order_ids: req.only_ids_by_day?.[d] ?? null,       //   ...v původním pořadí
             swap_id: req.swap_by_day?.[d]?.swap_id ?? null,     // "Vyměnit" v tomto dni
             keep_ids: req.swap_by_day?.[d]?.keep_ids ?? null,
         });
