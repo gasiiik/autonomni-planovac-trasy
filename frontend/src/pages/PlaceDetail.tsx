@@ -8,6 +8,7 @@ import { ArrowLeft, MapPin } from 'lucide-react';
 import { CATEGORY_COLORS, CATEGORY_LABELS, DIFFICULTY_LABELS, MONTHS } from '../constants';
 import { CategoryTag } from '../components/Icons';
 import PlaceImage from '../components/PlaceImage';
+import { applePlaceNavUrl, googlePlaceNavUrl, mapyPlaceNavUrl } from '../utils/navigation';
 
 function SmallMap({ lat, lng, color }: { lat: number; lng: number; color: string }) {
     const ref = useRef<HTMLDivElement>(null);
@@ -110,8 +111,12 @@ export default function PlaceDetail() {
                     <div className="rounded-3xl overflow-hidden shadow-lg border border-secondary h-72 relative z-0">
                         <SmallMap lat={place.lat} lng={place.lng} color={CATEGORY_COLORS[place.category]} />
                     </div>
-                    <a href={`https://mapy.cz/fnc/v1/showmap?center=${place.lng},${place.lat}&zoom=16&marker=true`} target="_blank" rel="noopener noreferrer"
-                        className="block text-center mt-3 text-primary font-semibold underline">Otevřít v Mapy.cz</a>
+                    <p className="text-center text-sm text-gray-500 mt-3">Navigovat sem:</p>
+                    <div className="flex justify-center flex-wrap gap-x-4 gap-y-1 mt-1 text-sm">
+                        <a href={googlePlaceNavUrl(place.lat, place.lng)} target="_blank" rel="noopener noreferrer" className="text-primary font-semibold underline">Google Maps</a>
+                        <a href={mapyPlaceNavUrl(place.lat, place.lng)} target="_blank" rel="noopener noreferrer" className="text-primary font-semibold underline">Mapy.cz</a>
+                        <a href={applePlaceNavUrl(place.lat, place.lng)} target="_blank" rel="noopener noreferrer" className="text-primary font-semibold underline">Apple Mapy</a>
+                    </div>
                 </div>
             </div>
         </div>

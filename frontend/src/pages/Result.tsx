@@ -2,12 +2,13 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import type { ItineraryItem, PlanRequest, PlanResponse } from '../types/api';
 import { generatePlan } from '../services/apiClient';
-import { CalendarPlus, Check, Clock, CloudRain, CloudSun, MapPin, Printer, Share2, Sun } from 'lucide-react';
+import { CalendarPlus, Check, Clock, CloudRain, CloudSun, MapPin, Navigation, Printer, Share2, Sun } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { CATEGORY_LABELS, TRANSPORT_LABELS } from '../constants';
 import { CategoryTag, TransportIcon, WeatherIcon } from '../components/Icons';
 import { decodePlan } from '../utils/plan';
 import { downloadIcs } from '../utils/calendar';
+import { applePlaceNavUrl, appleRouteUrl, googlePlaceNavUrl, googleRouteUrl, mapyPlaceNavUrl, mapyRouteUrl, tooManyForGoogle } from '../utils/navigation';
 import RouteMap from '../components/RouteMap';
 import PlaceImage from '../components/PlaceImage';
 
@@ -28,10 +29,9 @@ const WEATHER_ICONS: Record<PlanResponse['weather_status'], LucideIcon> = {
     UNKNOWN: CloudSun,
 };
 
+const NAV_BTN = 'inline-flex items-center justify-center px-5 py-2.5 rounded-full bg-primary text-white font-semibold hover:bg-primary-dark transition';
+const MAP_BTN = 'inline-flex items-center gap-1.5 px-3 py-2 rounded-full bg-white/95 text-primary-dark text-sm font-semibold shadow-md hover:bg-primary hover:text-white transition';
 const ACTION_BTN = 'inline-flex items-center gap-2 px-5 py-2 rounded-full bg-secondary text-primary-dark font-semibold hover:bg-primary hover:text-white transition';
-
-// Typ trasy pro navigaci v Mapy.cz podle zvolené dopravy
-const MAPY_ROUTE_TYPE: Record<string, string> = { CAR: 'car_fast', BIKE: 'bike_road', WALK: 'foot_fast' };
 
 const LOADING_STEPS = [
     'Načítám místa z DataZápadu…',
@@ -79,7 +79,6 @@ function TravelItem({ item }: { item: ItineraryItem }) {
 function PoiItem({ item, order, transport }: { item: ItineraryItem; order: number; transport: string }) {
     const category = item.category;
     const cost = item.estimated_cost && item.estimated_cost > 0 ? `${Math.round(item.estimated_cost)} Kč` : 'Zdarma';
-    const navUrl = `https://mapy.cz/fnc/v1/route?end=${item.lng},${item.lat}&routeType=${MAPY_ROUTE_TYPE[transport] ?? 'car_fast'}`;
     return (
         <div>
             <PlaceImage src={item.image_url} alt={item.title ?? ''} category={category} className="w-full h-48 rounded-xl mb-3" />
@@ -98,7 +97,14 @@ function PoiItem({ item, order, transport }: { item: ItineraryItem; order: numbe
             {item.description && <p className="text-sm text-gray-700 line-clamp-3">{item.description}</p>}
             <div className="flex flex-wrap gap-x-4 gap-y-1 mt-3 text-sm font-semibold print:hidden">
                 {item.poi_id && <Link to={`/misto/${item.poi_id}`} className="text-primary underline">Detail</Link>}
-                <a href={navUrl} target="_blank" rel="noopener noreferrer" className="text-primary underline">Navigovat (Mapy.cz)</a>
+                {item.lat != null && item.lng != null && (
+                    <span className="inline-flex items-center gap-x-2 text-gray-500 font-normal">
+                        <Navigation size={14} className="text-primary" aria-hidden="true" /> Navigovat:
+                        <a href={googlePlaceNavUrl(item.lat, item.lng, transport)} target="_blank" rel="noopener noreferrer" className="text-primary font-semibold underline">Google Maps</a>
+                        <a href={mapyPlaceNavUrl(item.lat, item.lng, transport)} target="_blank" rel="noopener noreferrer" className="text-primary font-semibold underline">Mapy.cz</a>
+                        <a href={applePlaceNavUrl(item.lat, item.lng, transport)} target="_blank" rel="noopener noreferrer" className="text-primary font-semibold underline">Apple Mapy</a>
+                    </span>
+                )}
                 {item.website && <a href={item.website} target="_blank" rel="noopener noreferrer" className="text-primary underline">Web místa</a>}
             </div>
             {item.source && (
@@ -224,6 +230,21 @@ export default function Result() {
                                 </p>
                             )}
 
+                            {/* Celá trasa v navigaci */}
+                            <div className="bg-white border-2 border-primary rounded-2xl p-4 mb-4 print:hidden">
+                                <p className="font-semibold text-primary-dark mb-3 flex items-center gap-2">
+                                    <Navigation size={18} className="text-primary" aria-hidden="true" /> Spustit celou trasu v navigaci
+                                </p>
+                                <div className="flex flex-wrap gap-3">
+                                    <a href={googleRouteUrl(result.waypoints, request.transport_mode)} target="_blank" rel="noopener noreferrer" className={NAV_BTN}>Google Maps</a>
+                                    <a href={mapyRouteUrl(result.waypoints, request.transport_mode)} target="_blank" rel="noopener noreferrer" className={NAV_BTN}>Mapy.cz</a>
+                                    <a href={appleRouteUrl(result.waypoints, request.transport_mode)} target="_blank" rel="noopener noreferrer" className={NAV_BTN}>Apple Mapy</a>
+                                </div>
+                                {tooManyForGoogle(result.waypoints) && (
+                                    <p className="text-xs text-gray-500 mt-2">Google Maps v odkazu zobrazí jen prvních 9 zastávek, Mapy.cz a Apple Mapy až 15.</p>
+                                )}
+                            </div>
+
                             {/* Akce */}
                             <div className="flex flex-wrap gap-3 mb-8 print:hidden">
                                 <button onClick={share} className={ACTION_BTN}>
@@ -277,6 +298,19 @@ export default function Result() {
                 <div className="lg:w-1/2 print:hidden">
                     <div className="sticky top-28 rounded-3xl h-[450px] lg:h-[calc(100vh-8rem)] overflow-hidden shadow-lg border border-secondary z-0">
                         <RouteMap waypoints={result.waypoints} activeStop={activeStop} onSelectStop={selectStop} />
+                        {stops.length > 0 && (
+                            <div className="absolute top-3 right-3 z-[1000] flex gap-2">
+                                <a href={googleRouteUrl(result.waypoints, request.transport_mode)} target="_blank" rel="noopener noreferrer" className={MAP_BTN}>
+                                    <Navigation size={14} aria-hidden="true" /> Google
+                                </a>
+                                <a href={mapyRouteUrl(result.waypoints, request.transport_mode)} target="_blank" rel="noopener noreferrer" className={MAP_BTN}>
+                                    <Navigation size={14} aria-hidden="true" /> Mapy.cz
+                                </a>
+                                <a href={appleRouteUrl(result.waypoints, request.transport_mode)} target="_blank" rel="noopener noreferrer" className={MAP_BTN}>
+                                    <Navigation size={14} aria-hidden="true" /> Apple
+                                </a>
+                            </div>
+                        )}
                     </div>
                     {stops.length > 0 && (
                         <p className="text-xs text-gray-500 mt-2">Trasa je zobrazena vzdušnou čarou. Najetím na zastávku ji zvýrazníte na mapě.</p>
