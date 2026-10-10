@@ -33,6 +33,12 @@ export function defaultTimes() {
     return { date: localDate(now), time_from: from, time_to: fromMinutes(Math.max(toMinutes(from) + 4 * 60, 18 * 60)) };
 }
 
+// Průvodce výletem: vždy dnešní datum a aktuální čas (i pozdě večer - datum si uživatel případně změní)
+export function currentTimes() {
+    const from = nowRounded();
+    return { date: localDate(new Date()), time_from: from, time_to: fromMinutes(Math.max(toMinutes(from) + 4 * 60, 18 * 60)) };
+}
+
 // Hlídá, aby odjezd nebyl v minulosti a návrat byl až po odjezdu (backend by jinak plán odmítl)
 export function normalizeTimes<T extends { date: string; time_from: string; time_to: string }>(form: T): T {
     const today = localDate(new Date());

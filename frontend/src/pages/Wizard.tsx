@@ -3,11 +3,11 @@ import type { ChangeEvent, FormEvent } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import type { Category, Location, PlanRequest } from '../types/api';
 import { fetchLocations } from '../services/apiClient';
-import { Check, LocateFixed } from 'lucide-react';
+import { Check, Clock, LocateFixed } from 'lucide-react';
 import { ALL_INTERESTS, DIFFICULTY_LABELS, FOOD_PREFERENCES, INTERESTS, TRANSPORT_LABELS } from '../constants';
 import { CategoryBadge, TransportIcon } from '../components/Icons';
 import LocationPicker from '../components/LocationPicker';
-import { defaultTimes, localDate, normalizeTimes, nowRounded, resultUrl } from '../utils/plan';
+import { currentTimes, localDate, normalizeTimes, nowRounded, resultUrl } from '../utils/plan';
 
 const STEPS = 6;
 
@@ -49,7 +49,8 @@ function initialForm(presetLocation: string | null): WizardForm {
         if (saved) {
             const form: WizardForm = JSON.parse(saved);
             // Staré zadání (jiný den nebo čas, který už proběhl) -> aktuální časy
-            const fresh = form.date < localDate(new Date()) ? { ...form, ...defaultTimes() } : normalizeTimes(form);
+            // Datum a čas odjezdu vždy aktuální (minulé plánování by nabídlo starý čas)
+            const fresh = { ...form, ...currentTimes() };
             // Výchozí místo se nepamatuje (obec ani poloha) - uživatel ho vždy vybere sám.
             // Výjimka: "Naplánovat výlet odsud" z detailu místa obec předvyplní.
             return { ...fresh, start: null, location_id: presetLocation ?? '' };
@@ -59,7 +60,7 @@ function initialForm(presetLocation: string | null): WizardForm {
     }
     return {
         location_id: presetLocation ?? '',
-        ...defaultTimes(),
+        ...currentTimes(),
         transport_mode: 'CAR',
         route_type: 'LOOP',
         interests: [],
@@ -106,6 +107,19 @@ export default function Wizard() {
     const [stepError, setStepError] = useState('');
     const [formData, setFormData] = useState<WizardForm>(() => initialForm(searchParams.get('location')));
     const [locating, setLocating] = useState(false);
+    const [now, setNow] = useState(() => new Date());
+
+    // Aktuální datum a čas nad formulářem (obnova každých 15 s)
+    useEffect(() => {
+        const t = setInterval(() => setNow(new Date()), 15000);
+        return () => clearInterval(t);
+    }, []);
+
+    // "Vyrazit teď" - odjezd hned teď, dnes
+    const departNow = () => {
+        setStepError('');
+        setFormData(prev => normalizeTimes({ ...prev, date: localDate(new Date()), time_from: nowRounded() }));
+    };
 
     // "Vyrazit z mé polohy" - poloha z prohlížeče, název podle nejbližší obce
     const useMyLocation = () => {
@@ -202,6 +216,16 @@ export default function Wizard() {
                     {step === 1 && (
                         <div className="space-y-6">
                             <h2 className="text-2xl font-bold text-primary-dark">Krok 1 – Čas a datum</h2>
+                            <div className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-xl bg-secondary/60">
+                                <p className="flex items-center gap-2 text-primary-dark">
+                                    <Clock size={18} className="text-primary" aria-hidden="true" />
+                                    Teď je <strong>{now.toLocaleDateString('cs-CZ', { weekday: 'long', day: 'numeric', month: 'numeric', year: 'numeric' })}</strong>,{' '}
+                                    <strong>{now.toLocaleTimeString('cs-CZ', { hour: '2-digit', minute: '2-digit' })}</strong>
+                                </p>
+                                <button type="button" onClick={departNow} className="px-4 py-1.5 rounded-full border-2 border-primary text-primary text-sm font-semibold hover:bg-primary hover:text-white transition">
+                                    Vyrazit teď
+                                </button>
+                            </div>
                             <div>
                                 <label className="block text-primary-dark mb-2">Datum výletu</label>
                                 <input type="date" name="date" min={localDate(new Date())} value={formData.date} onChange={handleChange} className={inputClass} required />
