@@ -57,7 +57,7 @@ class Accommodation(Base):
 
 
 class Dataset(Base):
-    """Metadata datové sady z DataZápad - pro uvedení zdroje u míst a stránku "O datech"."""
+    """Metadata datové sady z DataZápad - pro uvedení zdroje u míst a počítadlo dat."""
     __tablename__ = "datasets"
     service = Column(String(150), primary_key=True) # název ArcGIS služby = prefix ActivityPOI.external_id
     title = Column(String(255))

@@ -18,7 +18,7 @@ from .models import Accommodation, Dataset
 
 MAX_AGE_DAYS = int(os.getenv("AUTO_IMPORT_MAX_AGE_DAYS", "7"))
 
-# Stav pro stránku "O datech"
+# Stav automatického importu (běží-li právě, poslední chyba)
 state = {"running": False, "last_error": None}
 
 

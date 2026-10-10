@@ -873,7 +873,7 @@ def run_import(with_images=True, dry_run=False, refresh_images=False):
             loc.lat = sum(p[0] for p in pts) / len(pts)
             loc.lng = sum(p[1] for p in pts) / len(pts)
 
-        # Metadata datových sad (zdroj u míst + stránka "O datech")
+        # Metadata datových sad (zdroj u míst + počítadlo dat na úvodní stránce)
         imported_at = datetime.now(ZoneInfo("Europe/Prague")).replace(tzinfo=None)
         for svc, meta in datasets.items():
             db.merge(Dataset(**meta, places_used=used_per_service.get(svc, 0), imported_at=imported_at))

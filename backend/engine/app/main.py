@@ -24,6 +24,10 @@ app = FastAPI(title="KrušnoPlán Python Engine - Pokročilé Trasování", life
 # Kontejner běží v UTC, uživatelé plánují v českém čase
 LOCAL_TZ = ZoneInfo("Europe/Prague")
 
+# Denní doba návštěv - ani nonstop přístupná místa (prameny, zříceniny, příroda) neplánujeme v noci
+VISIT_FROM = (7, 0)
+VISIT_TO = (21, 0)
+
 # Nejdéle kolik minut jsme ochotni čekat před místem na otevření
 MAX_WAIT_MINS = 60
 
@@ -117,7 +121,7 @@ def get_locations(db: Session = Depends(get_db)):
 
 @app.get("/internal/datasets")
 def get_datasets(db: Session = Depends(get_db)):
-    """Přehled použitých datových sad z DataZápad pro stránku "O datech"."""
+    """Přehled použitých datových sad z DataZápad (počítadlo dat na úvodní stránce)."""
     try:
         datasets = db.query(Dataset).order_by(Dataset.places_used.desc()).all()
     except Exception:
@@ -303,27 +307,31 @@ def generate_plan(req: PlanRequest, db: Session = Depends(get_db)):
             travel_approx = calc_travel_time(dist, req.transport_mode)
             arrival_time = current_time + timedelta(minutes=travel_approx)
             wait = 0
+            day = arrival_time.replace(second=0, microsecond=0)
             try:
                 oh_h, oh_m = map(int, p.open_time.split(':'))
                 ct_h, ct_m = map(int, p.close_time.split(':'))
-                open_dt = arrival_time.replace(hour=oh_h, minute=oh_m, second=0, microsecond=0)
-                close_dt = arrival_time.replace(hour=ct_h, minute=ct_m, second=0, microsecond=0)
-
-                # Přijedeme chvíli před otevřením -> počkáme (max. MAX_WAIT_MINS), jinak místo zatím vynecháme
-                if arrival_time < open_dt:
-                    wait = math.ceil((open_dt - arrival_time).total_seconds() / 60)
-                    if wait > MAX_WAIT_MINS:
-                        skip_reasons.add("otevírací doba")
-                        depart = open_dt - timedelta(minutes=travel_approx)
-                        if next_departure is None or depart < next_departure:
-                            next_departure = depart
-                        continue
-                # Prohlídku musíme stihnout před zavíračkou
-                if arrival_time + timedelta(minutes=wait + p.est_duration_mins) > close_dt:
-                    skip_reasons.add("otevírací doba")
-                    continue
+                open_dt = day.replace(hour=oh_h, minute=oh_m)
+                close_dt = day.replace(hour=ct_h, minute=ct_m)
             except (AttributeError, ValueError):
-                pass # Pokud chybí data otevírací doby (např. park), ignorujeme a necháme projít
+                # Chybí otevírací doba (např. park) -> bereme jako volně přístupné
+                open_dt, close_dt = day.replace(hour=0, minute=0), day.replace(hour=23, minute=59)
+            # Volně přístupná místa (nonstop) neplánujeme v noci - návštěvy jen v rozumnou denní dobu
+            open_dt = max(open_dt, day.replace(hour=VISIT_FROM[0], minute=VISIT_FROM[1]))
+            close_dt = min(close_dt, day.replace(hour=VISIT_TO[0], minute=VISIT_TO[1]))
+            # Přijedeme chvíli před otevřením -> počkáme (max. MAX_WAIT_MINS), jinak místo zatím vynecháme
+            if arrival_time < open_dt:
+                wait = math.ceil((open_dt - arrival_time).total_seconds() / 60)
+                if wait > MAX_WAIT_MINS:
+                    skip_reasons.add("otevírací doba")
+                    depart = open_dt - timedelta(minutes=travel_approx)
+                    if next_departure is None or depart < next_departure:
+                        next_departure = depart
+                    continue
+            # Prohlídku musíme stihnout před zavíračkou
+            if arrival_time + timedelta(minutes=wait + p.est_duration_mins) > close_dt:
+                skip_reasons.add("otevírací doba")
+                continue
 
             # 3. Zohlednění nových SOČ parametrů
             price = p.price_estimated or 0
@@ -448,7 +456,7 @@ def generate_plan(req: PlanRequest, db: Session = Depends(get_db)):
                     "type": "wait",
                     "start": current_time.strftime("%H:%M"),
                     "end": (current_time + timedelta(minutes=wait_mins)).strftime("%H:%M"),
-                    "title": f"Čekání na otevření ({poi.open_time})",
+                    "title": f"Čekání na otevření ({(current_time + timedelta(minutes=wait_mins)):%H:%M})",
                     "duration_mins": wait_mins
                 })
                 current_time += timedelta(minutes=wait_mins)
