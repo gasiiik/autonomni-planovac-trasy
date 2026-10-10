@@ -285,11 +285,9 @@ export default function Home() {
 
                     <ol className="relative">
                         {STEPS.map(([title, text], i) => (
-                            <li key={title} className="relative pl-14 pb-8 last:pb-0">
-                                {/* Čárkovaná spojnice ke dalšímu kroku (jako trasa na mapě) */}
-                                {i < STEPS.length - 1 && <span className="absolute left-[19px] top-[60px] -bottom-5 border-l-2 border-dashed border-primary/50" aria-hidden="true" />}
-                                {/* Číslo kroku zarovnané s nadpisem karty; poslední (výsledek) plné */}
-                                <span className={`absolute left-0 top-5 flex items-center justify-center w-10 h-10 rounded-full border-2 border-primary font-bold ${i === STEPS.length - 1 ? 'bg-primary text-white' : 'bg-white text-primary'}`}>
+                            <li key={title} className="relative pl-20 pb-10 last:pb-0">
+                                {i < STEPS.length - 1 && <span className="absolute left-7 top-14 bottom-0 w-0.5 bg-secondary" aria-hidden="true" />}
+                                <span className="absolute left-0 top-0 flex items-center justify-center w-14 h-14 rounded-2xl bg-primary text-accent text-2xl font-extrabold shadow-md">
                                     {i + 1}
                                 </span>
                                 <div className="bg-secondary/60 rounded-2xl p-6">
