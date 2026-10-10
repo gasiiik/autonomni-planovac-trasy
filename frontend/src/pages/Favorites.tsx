@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Heart, Route } from 'lucide-react';
+import { Route } from 'lucide-react';
 import type { Category, Location, PlanRequest } from '../types/api';
 import { fetchLocations } from '../services/apiClient';
 import { CATEGORY_LABELS, TRANSPORT_LABELS } from '../constants';
@@ -62,9 +62,7 @@ export default function Favorites() {
 
     return (
         <div className="container mx-auto pt-28 pb-12 px-4 max-w-5xl">
-            <h1 className="text-3xl md:text-4xl font-bold text-primary-dark mb-2 flex items-center gap-3">
-                <Heart size={30} className="text-red-500" fill="currentColor" aria-hidden="true" /> Oblíbená místa
-            </h1>
+            <h1 className="text-3xl md:text-4xl font-bold text-primary-dark mb-2">Oblíbená místa</h1>
             <p className="text-gray-600 mb-8">Místa, která sis označil srdíčkem. Jsou uložená jen v tomhle prohlížeči.</p>
 
             {favorites.length === 0 ? (
