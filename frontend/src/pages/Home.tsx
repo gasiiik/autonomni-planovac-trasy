@@ -223,14 +223,14 @@ export default function Home() {
                         </Link>
                     </div>
 
-                    <ol className="relative">
+                    <ol className="space-y-4">
                         {STEPS.map(([title, text], i) => (
-                            <li key={title} className="relative pl-20 pb-10 last:pb-0">
-                                {i < STEPS.length - 1 && <span className="absolute left-7 top-14 bottom-0 w-0.5 bg-secondary" aria-hidden="true" />}
-                                <span className="absolute left-0 top-0 flex items-center justify-center w-14 h-14 rounded-2xl bg-primary text-accent text-2xl font-extrabold shadow-md">
-                                    {i + 1}
+                            <li key={title} className="flex items-start gap-5 bg-secondary/60 rounded-2xl p-6">
+                                {/* Velké typografické číslo kroku (01, 02, 03) */}
+                                <span className="shrink-0 w-16 text-5xl font-extrabold leading-none text-accent [text-shadow:0_1px_0_rgba(21,94,80,0.25)] tabular-nums">
+                                    {String(i + 1).padStart(2, '0')}
                                 </span>
-                                <div className="bg-secondary/60 rounded-2xl p-6">
+                                <div>
                                     <h3 className="text-xl font-bold text-primary-dark mb-2">{title}</h3>
                                     <p className="text-gray-700 leading-relaxed">{text}</p>
                                 </div>
