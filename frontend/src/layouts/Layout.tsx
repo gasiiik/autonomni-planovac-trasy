@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Outlet, Link, useLocation } from 'react-router-dom';
+import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { Heart } from 'lucide-react';
 import { useFavorites } from '../utils/favorites';
 
@@ -11,6 +11,19 @@ export default function Layout() {
     const [lastScrollY, setLastScrollY] = useState(0);
     const { pathname } = useLocation();
     const favorites = useFavorites();
+    const navigate = useNavigate();
+
+    // Otazník vždy posune na sekci "Jak to funguje" - i opakovaně a z jiné stránky
+    const showHowItWorks = (e: React.MouseEvent) => {
+        e.preventDefault();
+        const scroll = (tries = 0) => {
+            const el = document.getElementById('jak-to-funguje');
+            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            else if (tries < 40) setTimeout(() => scroll(tries + 1), 50);   // úvodní stránka se ještě vykresluje
+        };
+        if (pathname !== '/') navigate('/');
+        scroll();
+    };
 
     useEffect(() => {
         const handleScroll = () => {
@@ -59,7 +72,7 @@ export default function Layout() {
             </header>
 
             {/* Plovoucí otazník vlevo nahoře */}
-            <a href="/#jak-to-funguje" className="print:hidden fixed top-6 left-4 md:left-6 z-50 bg-primary text-white w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center shadow-lg hover:bg-primary-dark hover:scale-110 transition-all font-bold text-xl" title="Jak to funguje">
+            <a href="/#jak-to-funguje" onClick={showHowItWorks} className="print:hidden fixed top-6 left-4 md:left-6 z-50 bg-primary text-white w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center shadow-lg hover:bg-primary-dark hover:scale-110 transition-all font-bold text-xl" title="Jak to funguje">
                 ?
             </a>
 
