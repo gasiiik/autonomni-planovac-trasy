@@ -146,7 +146,7 @@ export default function VacationWizard() {
                 </div>
             </div>
 
-            <div className="bg-white rounded-3xl shadow-lg p-6 md:p-8 border border-secondary">
+            <div className="bg-white rounded-3xl shadow-xl shadow-primary/10 p-6 md:p-8 border border-secondary">
                 <form onSubmit={onSubmit}>
                     {step === 1 && (
                         <div className="space-y-6">

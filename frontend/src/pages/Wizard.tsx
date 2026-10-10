@@ -200,7 +200,7 @@ export default function Wizard() {
                 </div>
             </div>
 
-            <div className="bg-white rounded-3xl shadow-lg p-8 border border-secondary">
+            <div className="bg-white rounded-3xl shadow-xl shadow-primary/10 p-8 border border-secondary">
                 <form onSubmit={onSubmit}>
 
                     {step === 1 && (

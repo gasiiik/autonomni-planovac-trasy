@@ -1,9 +1,16 @@
 import { useState, useEffect } from 'react';
-import { Outlet, Link } from 'react-router-dom';
+import { Outlet, Link, useLocation } from 'react-router-dom';
+import { Heart } from 'lucide-react';
+import { useFavorites } from '../utils/favorites';
+
+// Stránky s vrstevnicemi na pozadí (průvodci a oblíbené)
+const TOPO_PAGES = ['/wizard', '/dovolena', '/oblibene'];
 
 export default function Layout() {
     const [isVisible, setIsVisible] = useState(true);
     const [lastScrollY, setLastScrollY] = useState(0);
+    const { pathname } = useLocation();
+    const favorites = useFavorites();
 
     useEffect(() => {
         const handleScroll = () => {
@@ -34,6 +41,12 @@ export default function Layout() {
                             <Link to="/" className="hover:text-accent transition-colors hidden lg:block">Domů</Link>
                             <Link to="/mapa" className="hover:text-accent transition-colors hidden md:block">Mapa míst</Link>
                             <Link to="/akce" className="hover:text-accent transition-colors hidden lg:block">Kalendář akcí</Link>
+                            <Link to="/oblibene" className="relative hover:text-accent transition-colors" title="Oblíbená místa" aria-label={`Oblíbená místa (${favorites.length})`}>
+                                <Heart size={22} fill={favorites.length ? 'currentColor' : 'none'} aria-hidden="true" />
+                                {favorites.length > 0 && (
+                                    <span className="absolute -top-2 -right-2.5 min-w-5 h-5 px-1 rounded-full bg-accent text-primary-dark text-xs font-bold flex items-center justify-center">{favorites.length}</span>
+                                )}
+                            </Link>
                             <Link to="/dovolena" className="border-2 border-accent text-accent hover:bg-accent hover:text-primary-dark transition-colors px-4 py-1.5 rounded-full font-bold whitespace-nowrap hidden sm:block">
                                 Naplánovat dovolenou
                             </Link>
@@ -50,12 +63,12 @@ export default function Layout() {
                 ?
             </a>
 
-            <main className="flex-grow bg-[#FFFFFF]">
+            <main className={`flex-grow ${TOPO_PAGES.includes(pathname) ? 'topo-bg' : 'bg-[#FFFFFF]'}`}>
                 <Outlet />
             </main>
             <footer className="print:hidden bg-primary-dark text-white p-6 text-center space-y-2">
                 <p className="text-sm text-white/90">
-                    Turistické cíle pochází z otevřených dat Karlovarského kraje –{' '}
+                    Turistické cíle pocházejí z otevřených dat Karlovarského kraje –{' '}
                     <a href="https://www.datazapad.cz/" target="_blank" rel="noopener noreferrer" className="underline hover:text-accent">DataZápad</a>
                     {' '}(licence CC BY 4.0 a CC0).
                 </p>

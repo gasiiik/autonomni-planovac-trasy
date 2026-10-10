@@ -60,7 +60,7 @@ export function addDays(date: string, n: number) {
     return localDate(d);
 }
 
-const distanceKm = (a: { lat: number; lng: number }, b: { lat: number; lng: number }) => {
+export const distanceKm = (a: { lat: number; lng: number }, b: { lat: number; lng: number }) => {
     const toRad = (x: number) => x * Math.PI / 180;
     const h = Math.sin(toRad(b.lat - a.lat) / 2) ** 2
         + Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(toRad(b.lng - a.lng) / 2) ** 2;

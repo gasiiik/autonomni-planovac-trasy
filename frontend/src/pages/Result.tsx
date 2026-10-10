@@ -16,6 +16,7 @@ import type { Stay, Trip, TripDay } from '../utils/vacation';
 import RouteMap from '../components/RouteMap';
 import TripOverviewMap from '../components/TripOverviewMap';
 import PlaceImage from '../components/PlaceImage';
+import FavoriteButton from '../components/FavoriteButton';
 
 const formatMins = (mins: number) => {
     const h = Math.floor(mins / 60);
@@ -93,7 +94,13 @@ function PoiItem({ item, order, transport, people, actions }: { item: ItineraryI
         : 'Zdarma';
     return (
         <div>
-            <PlaceImage src={item.image_url} alt={item.title ?? ''} category={category} className="w-full h-48 rounded-xl mb-3" />
+            <div className="relative">
+                <PlaceImage src={item.image_url} alt={item.title ?? ''} category={category} className="w-full h-48 rounded-xl mb-3" />
+                {item.poi_id != null && item.poi_id > 0 && category && item.lat != null && item.lng != null && (
+                    <FavoriteButton className="absolute top-3 right-3 shadow"
+                        place={{ id: item.poi_id, name: item.title ?? '', category, lat: item.lat, lng: item.lng, image_url: item.image_url ?? null }} />
+                )}
+            </div>
             <h3 className="text-xl font-bold text-primary-dark">{order}. {item.title}</h3>
             <p className="text-sm text-gray-500 mb-2 flex flex-wrap items-center gap-x-2 gap-y-1">
                 {category && <CategoryTag category={category} label={CATEGORY_LABELS[category] ?? category} />}
@@ -339,7 +346,7 @@ function ResultView() {
             const excluded = [...(request.exclude_ids ?? []), item.poi_id!];
             openPlan(request.vacation
                 ? { ...request, exclude_ids: excluded, max_stops_by_day: perDay(request.max_stops_by_day, currentIds.length), only_ids_by_day: perDay(request.only_ids_by_day, null) }
-                : { ...request, exclude_ids: excluded, max_stops: currentIds.length, only_ids: null });
+                : { ...request, exclude_ids: excluded, max_stops: currentIds.length, only_ids: request.favorite_ids ?? null });
         },
         // Odebrání: plán jen ze zbylých zastávek, nic nového se nedoplní (časy se přepočítají)
         onRemove: item => {
@@ -350,9 +357,10 @@ function ResultView() {
                 : { ...request, only_ids: rest, max_stops: null });
         },
     } : null;
-    const edited = !!request && (!!request.exclude_ids?.length || request.max_stops != null || !!request.only_ids?.length
+    const edited = !!request && (!!request.exclude_ids?.length || request.max_stops != null
+        || (!!request.only_ids?.length && request.only_ids.length !== request.favorite_ids?.length)
         || !!request.max_stops_by_day?.some(n => n != null) || !!request.only_ids_by_day?.some(n => n != null));
-    const resetEdits = () => request && openPlan({ ...request, exclude_ids: [], max_stops: null, only_ids: null, max_stops_by_day: [], only_ids_by_day: [] });
+    const resetEdits = () => request && openPlan({ ...request, exclude_ids: [], max_stops: null, only_ids: request.favorite_ids ?? null, max_stops_by_day: [], only_ids_by_day: [] });
 
     const chooseStay = (stay: Stay, a: AccommodationOption | null) => {
         if (!request?.vacation) return;
@@ -441,6 +449,7 @@ function ResultView() {
                     <h1 className="text-3xl font-bold text-primary-dark mb-2">
                         {tripDay ? `Den ${activeDay + 1}: ${tripDay.towns.map(t => t.name).join(' + ')}` : `Tvůj výlet: ${result.location}`}
                     </h1>
+                    {request.favorite_ids && <p className="text-sm text-gray-600 mb-3">Výlet z tvých oblíbených míst ({request.favorite_ids.length}). Co se do dne nevešlo nebo má zavřeno, jsme vynechali.</p>}
                     {tripDay && tripDay.nearby.length > 0 && (
                         <p className="text-sm text-gray-600 mb-3">
                             V {tripDay.towns.length > 1 ? 'vybraných obcích' : `obci ${tripDay.base.name}`} už program došel, proto jsme přidali i okolí: {tripDay.nearby.map(t => t.name).join(', ')}.

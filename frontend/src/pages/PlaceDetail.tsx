@@ -8,6 +8,7 @@ import { ArrowLeft, MapPin } from 'lucide-react';
 import { CATEGORY_COLORS, CATEGORY_LABELS, DIFFICULTY_LABELS, MONTHS } from '../constants';
 import { CategoryTag } from '../components/Icons';
 import PlaceImage from '../components/PlaceImage';
+import FavoriteButton from '../components/FavoriteButton';
 import { applePlaceNavUrl, googlePlaceNavUrl, mapyPlaceNavUrl } from '../utils/navigation';
 
 function SmallMap({ lat, lng, color }: { lat: number; lng: number; color: string }) {
@@ -90,6 +91,7 @@ export default function PlaceDetail() {
                             className="bg-accent text-primary-dark px-8 py-4 rounded-full font-bold hover:bg-yellow-400 transition shadow-md">
                             Naplánovat výlet odsud
                         </Link>
+                        <FavoriteButton withLabel place={{ id: place.id, name: place.name, category: place.category, lat: place.lat, lng: place.lng, image_url: place.image_url }} />
                         {place.website && (
                             <a href={place.website} target="_blank" rel="noopener noreferrer" className="text-primary font-semibold underline">Web místa</a>
                         )}
