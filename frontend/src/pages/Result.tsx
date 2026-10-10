@@ -7,7 +7,8 @@ import { BedDouble, CalendarDays, CalendarPlus, Check, Clock, CloudRain, CloudSu
 import type { LucideIcon } from 'lucide-react';
 import { CATEGORY_LABELS, DAY_COLORS, TRANSPORT_LABELS } from '../constants';
 import { CategoryTag, TransportIcon, WeatherIcon } from '../components/Icons';
-import { decodePlan, encodePlan } from '../utils/plan';
+import { decodePlan, encodePlan, tripKey } from '../utils/plan';
+import { saveTrip, useUser } from '../services/account';
 import { downloadIcs, downloadTripIcs } from '../utils/calendar';
 import { applePlaceNavUrl, appleRouteUrl, googlePlaceNavUrl, googleRouteUrl, mapyPlaceNavUrl, mapyRouteUrl, tooManyForGoogle } from '../utils/navigation';
 import { cityEventsUrl, townFromStartName, EVENTS_CALENDAR_URL } from '../utils/events';
@@ -281,6 +282,7 @@ function ResultView() {
     const [trip, setTrip] = useState<Trip | null>(null);       // dovolená (více dní)
     const [activeDay, setActiveDay] = useState(() => Math.max(0, parseInt(searchParams.get('day') ?? '0') || 0));
     const [printAll, setPrintAll] = useState(false);
+    const user = useUser();
     const [loading, setLoading] = useState(request !== null);
     const [error, setError] = useState(request ? '' : 'Žádná data k plánování – projdi nejdřív průvodce.');
     const [activeStop, setActiveStop] = useState<number | null>(null);
@@ -326,6 +328,22 @@ function ResultView() {
             // uživatel sdílení zrušil
         }
     };
+
+    // Přihlášený uživatel: výlet se uloží do "Moje výlety" (upravená verze přepíše původní záznam)
+    const planParam = searchParams.get('plan');
+    useEffect(() => {
+        if (!user || !request || !planParam || (!single && !trip)) return;
+        const count = (p: PlanResponse) => p.itinerary.filter(i => i.type === 'poi').length;
+        if (trip) {
+            saveTrip({ key: tripKey(request), kind: 'vacation', plan: planParam, days: trip.days.length,
+                title: `Dovolená: ${trip.stays.map(s => s.town.name).join(' → ')}`, trip_date: trip.days[0]?.date ?? request.time_from.slice(0, 10),
+                stops: trip.days.reduce((n, d) => n + count(d.plan), 0) }).catch(() => undefined);
+        } else if (single && !single.empty_reason) {
+            saveTrip({ key: tripKey(request), kind: 'trip', plan: planParam, days: 1,
+                title: `${request.favorite_ids ? 'Výlet z oblíbených' : 'Výlet'}: ${single.location}`, trip_date: request.time_from.slice(0, 10),
+                stops: count(single) }).catch(() => undefined);
+        }
+    }, [user, request, planParam, single, trip]);
 
     // Nový plán = nová URL (sdílitelná), u dovolené zůstaneme na stejném dni
     const openPlan = (next: PlanRequest) => {

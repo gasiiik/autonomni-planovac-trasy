@@ -1,7 +1,8 @@
 import { useSyncExternalStore } from 'react';
 import type { Category } from '../types/api';
+import { currentToken, fetchServerFavorites, putServerFavorites, setOnLogin } from '../services/account';
 
-// Oblíbená místa - jen v tomto prohlížeči (localStorage), bez přihlašování
+// Oblíbená místa - v prohlížeči (localStorage), s účtem se navíc ukládají na server (na všech zařízeních)
 export interface FavoritePlace {
     id: number;
     name: string;
@@ -26,8 +27,9 @@ function read(): FavoritePlace[] {
     return cache;
 }
 
-function write(list: FavoritePlace[]) {
+function write(list: FavoritePlace[], sync = true) {
     cache = list;
+    if (sync && currentToken()) putServerFavorites(list).catch(() => undefined);
     try {
         localStorage.setItem(KEY, JSON.stringify(list));
     } catch {
@@ -52,3 +54,23 @@ export function toggleFavorite(place: FavoritePlace) {
 }
 
 export const removeFavorite = (id: number) => write(read().filter(f => f.id !== id));
+
+// Při startu aplikace s účtem: platí seznam ze serveru (mohl se změnit na jiném zařízení)
+export async function loadServerFavorites() {
+    if (!currentToken()) return;
+    try {
+        write(await fetchServerFavorites(), false);
+    } catch {
+        // offline - zůstane seznam z prohlížeče
+    }
+}
+
+// Po přihlášení: k oblíbeným z účtu přidáme ta, která si uživatel označil před přihlášením
+setOnLogin(async () => {
+    const server = await fetchServerFavorites();
+    const local = read().filter(f => !server.some(s => s.id === f.id));
+    write([...server, ...local], local.length > 0);
+});
+
+// Po odhlášení oblíbená z prohlížeče smažeme (zůstávají v účtu)
+export const clearLocalFavorites = () => write([], false);

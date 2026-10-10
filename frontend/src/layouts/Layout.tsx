@@ -1,17 +1,22 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Outlet, Link, useLocation } from 'react-router-dom';
-import { Heart } from 'lucide-react';
-import { useFavorites } from '../utils/favorites';
+import { Heart, UserRound } from 'lucide-react';
+import { loadServerFavorites, useFavorites } from '../utils/favorites';
+import { refreshUser, useUser } from '../services/account';
 import HelpDrawer from '../components/HowItWorks';
 
 // Stránky s vrstevnicemi na pozadí (průvodci a oblíbené)
-const TOPO_PAGES = ['/wizard', '/dovolena', '/oblibene'];
+const TOPO_PAGES = ['/wizard', '/dovolena', '/oblibene', '/ucet'];
 
 export default function Layout() {
     const [isVisible, setIsVisible] = useState(true);
     const [lastScrollY, setLastScrollY] = useState(0);
     const { pathname } = useLocation();
     const favorites = useFavorites();
+    const user = useUser();
+
+    // Přihlášený uživatel: ověřit přihlášení a načíst oblíbená z účtu (mohla se změnit na jiném zařízení)
+    useEffect(() => { refreshUser().then(loadServerFavorites); }, []);
     // Lišta s nápovědou je otevřená jen na stránce, kde se otevřela (při přechodu jinam se zavře)
     const [helpOpenOn, setHelpOpenOn] = useState<string | null>(null);
     const helpOpen = helpOpenOn === pathname;
@@ -48,16 +53,16 @@ export default function Layout() {
 
     return (
         <div className="min-h-screen flex flex-col">
-            <header className={`print:hidden fixed top-6 left-0 w-full z-50 px-4 transition-transform duration-300 ${isVisible ? 'translate-y-0' : '-translate-y-[150%]'}`}>
+            <header className={`print:hidden fixed top-6 left-0 w-full z-50 pl-16 pr-4 xl:px-4 transition-transform duration-300 ${isVisible ? 'translate-y-0' : '-translate-y-[150%]'}`}>
                 <div className="container mx-auto flex justify-center">
-                    <div className="bg-primary/80 backdrop-blur-md border border-white/20 shadow-lg rounded-full px-6 py-2 flex items-center justify-between w-full max-w-4xl">
+                    <div className="bg-primary/80 backdrop-blur-md border border-white/20 shadow-lg rounded-full pl-3 pr-2 sm:px-6 py-2 flex items-center justify-between w-full max-w-4xl xl:max-w-5xl gap-4">
                         <Link to="/" className="flex items-center gap-2 font-bold tracking-wide text-xl text-white hover:text-accent transition-colors shrink-0">
-                            <img src="/images/logo.png" alt="" className="h-8 w-auto rounded-md" />
-                            KrušnoPlán
+                            <img src="/images/logo.png" alt="KrušnoPlán" className="h-8 w-auto rounded-md" />
+                            <span className="hidden sm:inline">KrušnoPlán</span>
                         </Link>
                         
-                        <nav className="flex items-center gap-3 lg:gap-6 font-medium text-sm text-white">
-                            <Link to="/" className="hover:text-accent transition-colors hidden lg:block">Domů</Link>
+                        <nav className="flex items-center gap-3 lg:gap-5 font-medium text-sm text-white whitespace-nowrap">
+                            <Link to="/" className="hover:text-accent transition-colors hidden xl:block">Domů</Link>
                             <Link to="/mapa" className="hover:text-accent transition-colors hidden md:block">Mapa míst</Link>
                             <Link to="/akce" className="hover:text-accent transition-colors hidden lg:block">Kalendář akcí</Link>
                             <Link to="/oblibene" className="relative hover:text-accent transition-colors" title="Oblíbená místa" aria-label={`Oblíbená místa (${favorites.length})`}>
@@ -66,10 +71,15 @@ export default function Layout() {
                                     <span className="absolute -top-2 -right-2.5 min-w-5 h-5 px-1 rounded-full bg-accent text-primary-dark text-xs font-bold flex items-center justify-center">{favorites.length}</span>
                                 )}
                             </Link>
+                            <Link to="/ucet" className="hover:text-accent transition-colors" title={user ? `Můj účet (${user.email})` : 'Přihlásit se'} aria-label={user ? 'Můj účet' : 'Přihlásit se'}>
+                                {user
+                                    ? <span className="w-7 h-7 rounded-full bg-accent text-primary-dark font-bold flex items-center justify-center text-sm uppercase">{user.name.charAt(0)}</span>
+                                    : <UserRound size={22} aria-hidden="true" />}
+                            </Link>
                             <Link to="/dovolena" className="border-2 border-accent text-accent hover:bg-accent hover:text-primary-dark transition-colors px-4 py-1.5 rounded-full font-bold whitespace-nowrap hidden sm:block">
                                 Naplánovat dovolenou
                             </Link>
-                            <Link to="/wizard" className="bg-accent text-primary-dark hover:bg-yellow-400 transition-colors px-4 lg:px-5 py-2 rounded-full font-bold shadow-sm whitespace-nowrap">
+                            <Link to="/wizard" className="bg-accent text-primary-dark hover:bg-yellow-400 transition-colors px-3 sm:px-4 lg:px-5 py-2 rounded-full font-bold shadow-sm whitespace-nowrap">
                                 Naplánovat výlet
                             </Link>
                         </nav>

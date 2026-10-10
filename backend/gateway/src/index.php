@@ -1,7 +1,8 @@
 <?php
+ini_set('display_errors', '0');   // varování PHP nesmí rozbít JSON odpověď (zapisují se do logu)
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: POST, GET, OPTIONS');
+header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type, Authorization');
 
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
@@ -53,71 +54,12 @@ function forward_to_engine($path, $payload = null) {
 $request_uri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
 $method = $_SERVER['REQUEST_METHOD'];
 
-// POST /api/register
-if ($request_uri === '/api/register' && $method === 'POST') {
-    $data = json_decode(file_get_contents("php://input"), true);
-    
-    if (empty($data['username']) || empty($data['password'])) {
-        http_response_code(400);
-        echo json_encode(["error" => "Missing username or password"]);
-        exit();
-    }
-
-    $username = $data['username'];
-    
-    // ZABEZPEČENÍ: Šifrování hesla pomocí Bcrypt/Argon2
-    $hashed_password = password_hash($data['password'], PASSWORD_DEFAULT);
-
-    try {
-        $stmt = $pdo->prepare("INSERT INTO users (username, password_hash) VALUES (?, ?)");
-        $stmt->execute([$username, $hashed_password]);
-        
-        http_response_code(201);
-        echo json_encode(["message" => "User successfully registered"]);
-    } catch (PDOException $e) {
-        // 23000 = porušení UNIQUE (uživatel už existuje), ostatní chyby jsou chyby serveru
-        if ($e->getCode() === '23000') {
-            http_response_code(409); // Conflict
-            echo json_encode(["error" => "Username already exists"]);
-        } else {
-            http_response_code(500);
-            echo json_encode(["error" => "Registration failed"]);
-        }
-    }
-    exit();
-}
-
-// POST /api/login
-if ($request_uri === '/api/login' && $method === 'POST') {
-    $data = json_decode(file_get_contents("php://input"), true);
-    $username = $data['username'] ?? '';
-    $password = $data['password'] ?? '';
-
-    $stmt = $pdo->prepare("SELECT id, password_hash FROM users WHERE username = ?");
-    $stmt->execute([$username]);
-    $user = $stmt->fetch();
-
-    // ZABEZPEČENÍ: Verifikace šifrovaného hesla
-    if ($user && password_verify($password, $user['password_hash'])) {
-        // Zde by v produkci vznikl JWT token
-        $token = bin2hex(random_bytes(16));
-        
-        echo json_encode([
-            "message" => "Login successful", 
-            "token" => $token,
-            "user_id" => $user['id']
-        ]);
-    } else {
-        http_response_code(401);
-        echo json_encode(["error" => "Invalid credentials"]);
-    }
-    exit();
-}
+// Uživatelské účty a jejich data (/api/auth/..., /api/me...)
+require __DIR__ . '/account.php';
+handle_account($pdo, $request_uri, $method);
 
 // Gateway route - Forwarding to Python Engine
 if ($request_uri === '/api/planner' && $method === 'POST') {
-    // Ověření autorizace by proběhlo zde (ověření JWT z hlavičky Bearer)
-
     forward_to_engine('/internal/planner/generate', file_get_contents("php://input"));
 }
 
