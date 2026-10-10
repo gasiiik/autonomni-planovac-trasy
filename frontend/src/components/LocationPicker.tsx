@@ -4,7 +4,8 @@ import { ChevronDown, LocateFixed, MapPin, X } from 'lucide-react';
 import type { Location } from '../types/api';
 
 // Výběr výchozí obce: seznam se vždy otevírá směrem dolů (nativní <select> si směr volí prohlížeč)
-// a jde v něm psát - hledá se bez ohledu na diakritiku ("bozi" najde Boží Dar)
+// a jde v něm psát - hledá se bez ohledu na diakritiku ("bozi" najde Boží Dar).
+// "Moje poloha" je samostatné tlačítko ve formuláři - v seznamu jsou jen obce.
 
 const normalize = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 
@@ -12,18 +13,16 @@ interface Props {
     locations: Location[];
     value: string;                         // id vybrané obce
     startName?: string | null;             // vybraná "moje poloha"
-    locating?: boolean;
     onSelect: (id: string) => void;
-    onUseMyLocation: () => void;
     onClearStart: () => void;
 }
 
-const MY_LOCATION = -1; // index položky "Vyrazit z mé polohy" v seznamu
+const NONE = -1; // nic zvýrazněného
 
-export default function LocationPicker({ locations, value, startName, locating, onSelect, onUseMyLocation, onClearStart }: Props) {
+export default function LocationPicker({ locations, value, startName, onSelect, onClearStart }: Props) {
     const [open, setOpen] = useState(false);
     const [query, setQuery] = useState('');
-    const [highlight, setHighlight] = useState(MY_LOCATION);
+    const [highlight, setHighlight] = useState(NONE);
     const rootRef = useRef<HTMLDivElement>(null);
     const listRef = useRef<HTMLUListElement>(null);
 
@@ -56,12 +55,12 @@ export default function LocationPicker({ locations, value, startName, locating, 
         setOpen(true);
         setQuery('');
         const idx = locations.findIndex(l => String(l.id) === value);
-        setHighlight(idx >= 0 ? idx : MY_LOCATION);
+        setHighlight(idx >= 0 ? idx : NONE); // zvýrazníme jen už vybranou obec
     };
 
     const choose = (index: number) => {
-        if (index === MY_LOCATION) onUseMyLocation();
-        else if (filtered[index]) onSelect(String(filtered[index].id));
+        if (filtered[index]) onSelect(String(filtered[index].id));
+        else return; // Enter bez zvýrazněné obce nic nevybere
         setOpen(false);
         setQuery('');
     };
@@ -77,7 +76,7 @@ export default function LocationPicker({ locations, value, startName, locating, 
             setHighlight(h => Math.min(h + 1, filtered.length - 1));
         } else if (e.key === 'ArrowUp') {
             e.preventDefault();
-            setHighlight(h => Math.max(h - 1, MY_LOCATION));
+            setHighlight(h => Math.max(h - 1, 0));
         } else if (e.key === 'Enter') {
             e.preventDefault();
             choose(highlight);
@@ -116,7 +115,7 @@ export default function LocationPicker({ locations, value, startName, locating, 
                     placeholder={locations.length ? (selected?.name ?? 'Napiš nebo vyber obec…') : 'Načítám obce…'}
                     onFocus={openList}
                     onClick={() => !open && openList()}
-                    onChange={e => { setQuery(e.target.value); setOpen(true); setHighlight(e.target.value ? 0 : MY_LOCATION); }}
+                    onChange={e => { setQuery(e.target.value); setOpen(true); setHighlight(e.target.value ? 0 : NONE); }}
                     onKeyDown={onKeyDown}
                     disabled={!locations.length}
                     className="w-full border border-gray-300 rounded-xl p-3 pr-10 focus:outline-none focus:ring-2 focus:ring-primary"
@@ -127,12 +126,6 @@ export default function LocationPicker({ locations, value, startName, locating, 
             {open && (
                 <ul id="location-listbox" ref={listRef} role="listbox"
                     className="absolute left-0 right-0 top-full mt-1 z-30 max-h-72 overflow-y-auto bg-white border border-gray-200 rounded-xl shadow-xl py-1">
-                    <li role="option" aria-selected={highlight === MY_LOCATION} data-active={highlight === MY_LOCATION}
-                        onMouseDown={e => { e.preventDefault(); choose(MY_LOCATION); }}
-                        onMouseEnter={() => setHighlight(MY_LOCATION)}
-                        className={`${optionClass(highlight === MY_LOCATION)} font-semibold text-primary border-b border-gray-100`}>
-                        <LocateFixed size={18} aria-hidden="true" /> {locating ? 'Zjišťuji polohu…' : 'Vyrazit z mé polohy'}
-                    </li>
                     {filtered.map((l, i) => (
                         <li key={l.id} role="option" aria-selected={String(l.id) === value} data-active={highlight === i}
                             onMouseDown={e => { e.preventDefault(); choose(i); }}

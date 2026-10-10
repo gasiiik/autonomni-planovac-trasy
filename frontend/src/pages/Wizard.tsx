@@ -247,14 +247,13 @@ export default function Wizard() {
                                         locations={locations}
                                         value={formData.location_id}
                                         startName={formData.start?.name}
-                                        locating={locating}
                                         onSelect={id => { setStepError(''); setFormData(prev => ({ ...prev, location_id: id, start: null })); }}
-                                        onUseMyLocation={useMyLocation}
                                         onClearStart={() => setFormData(prev => ({ ...prev, start: null }))}
                                     />
                                 )}
                                 {!formData.start && !locationsError && (
                                     <button type="button" onClick={useMyLocation} disabled={locating || !locations.length}
+                                        title="Nepovinné – místo obce můžeš vyrazit z místa, kde právě jsi"
                                         className="mt-3 inline-flex items-center gap-2 px-4 py-2 rounded-full border-2 border-primary text-primary font-semibold hover:bg-primary hover:text-white transition disabled:opacity-60">
                                         <LocateFixed size={18} aria-hidden="true" /> {locating ? 'Zjišťuji polohu…' : 'Vyrazit z mé polohy'}
                                     </button>
