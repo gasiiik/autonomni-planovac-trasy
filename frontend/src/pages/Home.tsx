@@ -84,7 +84,7 @@ export default function Home() {
     return (
         <div>
             {/* Hero Section */}
-            <section className="relative h-[90vh] flex items-center justify-center bg-primary-dark text-white text-center px-4 overflow-hidden">
+            <section className="relative min-h-[90vh] flex items-center justify-center bg-primary-dark text-white text-center px-4 overflow-hidden">
                 {/* Background Images Slider */}
                 {bgImages.map((src, index) => (
                     <div
@@ -97,7 +97,7 @@ export default function Home() {
                 {/* Darken Overlay */}
                 <div className="absolute inset-0 bg-primary-dark opacity-60 mix-blend-multiply" />
 
-                <div className="relative z-20 max-w-4xl mx-auto px-4 md:px-8 pt-32 pb-12">
+                <div className="relative z-20 max-w-4xl mx-auto px-4 md:px-8 pt-32 pb-36 md:pb-48">
                     <h1 className="text-4xl md:text-6xl lg:text-7xl font-extrabold mb-6 drop-shadow-lg leading-tight">
                         Objev svůj další <span className="text-accent">nezapomenutelný</span> zážitek.
                     </h1>
