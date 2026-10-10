@@ -81,12 +81,15 @@ frontend (React, :5173) → PHP gateway (:8080) → Python engine (FastAPI, :800
 
 Potřebujete [Docker](https://www.docker.com/) s Docker Compose.
 
-V hlavní složce projektu (nebo ve složce `backend`, výsledek je stejný):
+V hlavní složce projektu (potřeba je jen Docker Desktop):
 ```bash
 docker compose up -d --build
 ```
+Web: http://localhost:5173, API: http://localhost:8080/api. Při prvním spuštění se databáze zakládá asi půl minuty – brána a engine na ni počkají (`docker compose ps` ukáže `db ... (healthy)`).
 
-Data z DataZápadu i ubytování a restaurace z OpenStreetMap se stáhnou **automaticky** při startu enginu – při prvním spuštění (cca 10 minut včetně fotek) a pak vždy, když jsou starší než 7 dní (`AUTO_IMPORT_MAX_AGE_DAYS` v `backend/docker-compose.yml`, vypnutí `AUTO_IMPORT=0`). Aplikace mezitím běží, průběh uvidíte v `docker compose logs -f python_engine`.
+Když něco nejde: `docker compose ps` (běží všechny 4 kontejnery?) a `docker compose logs db` / `docker compose logs php_gateway`. Starou databázi z dřívější verze smaže `docker compose down -v` (data se pak stáhnou znovu).
+
+Data z DataZápadu i ubytování a restaurace z OpenStreetMap se stáhnou **automaticky** při startu enginu – při prvním spuštění (cca 10 minut včetně fotek) a pak vždy, když jsou starší než 7 dní (`AUTO_IMPORT_MAX_AGE_DAYS` v `docker-compose.yml`, vypnutí `AUTO_IMPORT=0`). Aplikace mezitím běží, průběh uvidíte v `docker compose logs -f python_engine`.
 
 Ruční spuštění importu:
 ```bash

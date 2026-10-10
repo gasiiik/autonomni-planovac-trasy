@@ -14,15 +14,23 @@ $dsn = "mysql:host=db;dbname=krusnoplan;charset=utf8mb4";
 $user = "api_user";
 $pass = "api_password";
 
-try {
-    $pdo = new PDO($dsn, $user, $pass, [
-        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-    ]);
-} catch (PDOException $e) {
-    http_response_code(500);
-    echo json_encode(["error" => "Database connection failed"]);
-    exit();
+// Databáze může ještě startovat (první spuštění) -> několik pokusů, než to vzdáme
+$pdo = null;
+for ($attempt = 1; $attempt <= 5 && !$pdo; $attempt++) {
+    try {
+        $pdo = new PDO($dsn, $user, $pass, [
+            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+        ]);
+    } catch (PDOException $e) {
+        if ($attempt < 5) sleep(1);
+        else {
+            error_log('KrušnoPlán: připojení k databázi selhalo: ' . $e->getMessage());
+            http_response_code(503);
+            echo json_encode(["error" => "Database connection failed – databáze ještě startuje nebo neběží. Zkontroluj `docker compose ps` a `docker compose logs db`."]);
+            exit();
+        }
+    }
 }
 
 // Přeposlání požadavku do Python enginu. Když engine neběží, vrátíme 502 s čitelnou chybou

@@ -1,3 +1,4 @@
+# Spuštění celého projektu: docker compose up -d --build
 name: backend
 
 services:
@@ -8,11 +9,18 @@ services:
       MARIADB_DATABASE: krusnoplan
       MARIADB_USER: api_user
       MARIADB_PASSWORD: api_password
-    ports:
-      - "3306:3306"
+    # Port 3306 nezveřejňujeme - brána i engine se připojují uvnitř Dockeru
+    # (a u koho běží lokální MySQL/XAMPP, tomu by obsazený port databázi nespustil)
     volumes:
       - mariadb_data:/var/lib/mysql
       - ./backend/db/init.sql:/docker-entrypoint-initdb.d/init.sql
+    # Databáze je "zdravá", až když přijímá spojení (první start s init.sql trvá desítky sekund)
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
 
   php_gateway:
     build:
@@ -22,7 +30,8 @@ services:
     volumes:
       - ./backend/gateway/src:/var/www/html
     depends_on:
-      - db
+      db:
+        condition: service_healthy
 
   python_engine:
     build:
@@ -37,7 +46,8 @@ services:
       - AUTO_IMPORT_MAX_AGE_DAYS=7
       - PYTHONUNBUFFERED=1
     depends_on:
-      - db
+      db:
+        condition: service_healthy
 
   frontend:
     build:
