@@ -1,5 +1,5 @@
 import os
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 # Spojení na MariaDB z proměnné prostředí
@@ -15,3 +15,16 @@ def get_db():
         yield db
     finally:
         db.close()
+
+
+def ensure_planner_columns():
+    """Upgrade existing MariaDB installations without requiring a data reset."""
+    with engine.begin() as connection:
+        connection.execute(text(
+            "ALTER TABLE activity_pois "
+            "ADD COLUMN IF NOT EXISTS opening_hours_json TEXT NULL"
+        ))
+        connection.execute(text(
+            "ALTER TABLE activity_pois "
+            "ADD COLUMN IF NOT EXISTS tour_slots_json TEXT NULL"
+        ))

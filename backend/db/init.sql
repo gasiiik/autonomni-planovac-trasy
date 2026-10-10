@@ -22,6 +22,8 @@ CREATE TABLE IF NOT EXISTS activity_pois (
     lat DECIMAL(10,8),
     lng DECIMAL(11,8),
     image_url VARCHAR(255),
+    opening_hours_json TEXT NULL,
+    tour_slots_json TEXT NULL,
     FOREIGN KEY (location_id) REFERENCES locations(id) ON DELETE CASCADE
 );
 

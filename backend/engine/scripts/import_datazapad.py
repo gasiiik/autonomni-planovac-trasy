@@ -93,6 +93,8 @@ def run_import():
         existing_poi = db.query(ActivityPOI).filter(ActivityPOI.name == poi_nazev, ActivityPOI.location_id == location.id).first()
         
         if not existing_poi:
+            opening_hours = props.get("OPENING_HOURS_JSON") or props.get("OTEVIRACI_DOBA_JSON")
+            tour_slots = props.get("TOUR_SLOTS_JSON") or props.get("TERMINY_PROHLIDEK_JSON")
             # Vytvoříme památku
             new_poi = ActivityPOI(
                 location_id=location.id,
@@ -102,14 +104,21 @@ def run_import():
                 est_duration_mins=props.get("DOBA_PROHLIDKY_MIN", 60),
                 lat=lat,
                 lng=lng,
-                image_url=props.get("FOTO_URL", "")
+                image_url=props.get("FOTO_URL", ""),
+                opening_hours_json=(opening_hours if isinstance(opening_hours, str) else json.dumps(opening_hours, ensure_ascii=False)) if opening_hours else None,
+                tour_slots_json=(tour_slots if isinstance(tour_slots, str) else json.dumps(tour_slots, ensure_ascii=False)) if tour_slots else None,
             )
             db.add(new_poi)
             added_pois += 1
             print(f"✅ Naimportováno: {poi_nazev}")
         else:
-            # Volitelně můžeme updatovat data, pokud už památku máme
-            pass
+            # Refresh schedules when an upstream DataZápad export supplies them.
+            opening_hours = props.get("OPENING_HOURS_JSON") or props.get("OTEVIRACI_DOBA_JSON")
+            tour_slots = props.get("TOUR_SLOTS_JSON") or props.get("TERMINY_PROHLIDEK_JSON")
+            if opening_hours:
+                existing_poi.opening_hours_json = opening_hours if isinstance(opening_hours, str) else json.dumps(opening_hours, ensure_ascii=False)
+            if tour_slots:
+                existing_poi.tour_slots_json = tour_slots if isinstance(tour_slots, str) else json.dumps(tour_slots, ensure_ascii=False)
 
     db.commit()
     db.close()

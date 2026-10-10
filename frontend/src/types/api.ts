@@ -25,6 +25,8 @@ export interface ItineraryItem {
     category?: string;
     lat?: number;
     lng?: number;
+    opening_hours_known?: boolean;
+    tour_schedule_known?: boolean;
 }
 
 export interface PlanResponse {

@@ -73,10 +73,21 @@ export default function Result() {
                                         <div>
                                             <p className="text-gray-600">Přesun ({item.mode}) - {item.distance_km} km</p>
                                         </div>
+                                    ) : item.type === 'wait' ? (
+                                        <div>
+                                            <h3 className="text-lg font-bold text-primary-dark">{item.title}</h3>
+                                            <p className="text-sm text-gray-600">Čekání je započítané do celkové délky výletu.</p>
+                                        </div>
                                     ) : (
                                         <div>
                                             <h3 className="text-xl font-bold text-primary-dark">{item.title}</h3>
                                             <p className="text-sm text-gray-500 mb-2">{item.category}</p>
+                                            {item.type === 'poi' && !item.opening_hours_known && (
+                                                <p className="text-xs text-amber-700">Otevírací doba není v dostupných datech ověřená.</p>
+                                            )}
+                                            {item.type === 'poi' && !item.tour_schedule_known && (
+                                                <p className="text-xs text-amber-700">Časy komentovaných prohlídek nejsou v dostupných datech ověřené.</p>
+                                            )}
                                         </div>
                                     )}
                                 </div>

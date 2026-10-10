@@ -20,5 +20,9 @@ class ActivityPOI(Base):
     lat = Column(Float)
     lng = Column(Float)
     image_url = Column(String(255))
+    # ISO weekday (1=Monday … 7=Sunday) -> [["09:00", "17:00"], …]
+    opening_hours_json = Column(Text, nullable=True)
+    # ISO weekday -> ["10:00", "13:00", …] guided-tour start slots.
+    tour_slots_json = Column(Text, nullable=True)
     
     location = relationship("Location")
