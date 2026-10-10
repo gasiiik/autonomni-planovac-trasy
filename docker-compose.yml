@@ -1,5 +1,48 @@
-# Spuštění celého projektu z hlavní složky: docker compose up --build
-# Vlastní konfigurace je v backend/docker-compose.yml (databáze, brána, plánovač, web)
-name: backend   # stejný název projektu jako při spuštění ze složky backend -> stejné kontejnery i data
-include:
-  - backend/docker-compose.yml
+version: '3.8'
+
+services:
+  db:
+    image: mariadb:10.11
+    environment:
+      MARIADB_ROOT_PASSWORD: rootpassword
+      MARIADB_DATABASE: krusnoplan
+      MARIADB_USER: api_user
+      MARIADB_PASSWORD: api_password
+    ports:
+      - "3307:3306" # Změněno na 3307 pro zamezení konfliktů
+    volumes:
+      - mariadb_data:/var/lib/mysql
+      - ./backend/db/init.sql:/docker-entrypoint-initdb.d/init.sql
+
+  php_gateway:
+    build:
+      context: ./backend/gateway
+    ports:
+      - "8080:80"
+    volumes:
+      - ./backend/gateway/src:/var/www/html
+    depends_on:
+      - db
+
+  python_engine:
+    build:
+      context: ./backend/engine
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend/engine:/app
+    environment:
+      - DATABASE_URL=mysql+pymysql://api_user:api_password@db/krusnoplan
+    depends_on:
+      - db
+
+  frontend:
+    build:
+      context: ./frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - php_gateway
+
+volumes:
+  mariadb_data:
