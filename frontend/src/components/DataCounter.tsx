@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
 import type { DatasetsResponse, Place } from '../types/api';
+import { RefreshCw } from 'lucide-react';
 import { TAG_LABELS } from '../constants';
 
 // Číslo "naběhne" od nuly (ease-out, ~1,2 s)
@@ -42,14 +42,13 @@ export default function DataCounter({ stats, places }: { stats: DatasetsResponse
 
     const items = [
         { value: stats.places_from_datazapad, label: 'turistických míst' },
-        { value: stats.datasets.length, label: 'datových sad' },
         ...(factCount ? [{ value: factCount, label: TAG_LABELS[fact] }] : []),
     ];
 
     return (
         <section className="relative z-20 -mt-16 md:-mt-24 px-4">
             <div className="container mx-auto max-w-5xl bg-white rounded-3xl shadow-xl border border-secondary p-6 md:p-8">
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-6 text-center">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 text-center">
                     {items.map(item => (
                         <div key={item.label}>
                             <p className="text-4xl md:text-5xl font-extrabold text-primary"><CountUp value={item.value} /></p>
@@ -57,15 +56,10 @@ export default function DataCounter({ stats, places }: { stats: DatasetsResponse
                         </div>
                     ))}
                     <div>
-                        <p className="text-4xl md:text-5xl font-extrabold text-primary">✓</p>
+                        <p className="flex justify-center h-10 md:h-12 items-center text-primary"><RefreshCw size={38} strokeWidth={2.5} aria-hidden="true" /></p>
                         <p className="text-gray-600 mt-1">aktualizováno {lastUpdateLabel(stats.last_import)}</p>
                     </div>
                 </div>
-                <p className="text-center text-sm text-gray-500 mt-6">
-                    Data z <a href="https://www.datazapad.cz/" target="_blank" rel="noopener noreferrer" className="text-primary underline">Katalogu otevřených dat Karlovarského kraje – DataZápad</a>
-                    {' · '}
-                    <Link to="/o-datech" className="text-primary underline">přehled použitých dat</Link>
-                </p>
             </div>
         </section>
     );

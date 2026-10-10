@@ -15,6 +15,7 @@ export interface PlanRequest {
     difficulty?: 'EASY' | 'MEDIUM' | 'HARD';
     participants_count?: number;
     has_children?: boolean;
+    indoor_when_rain?: boolean;
 }
 
 export interface Waypoint {

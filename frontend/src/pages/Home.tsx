@@ -2,9 +2,12 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import type { DatasetsResponse, Place } from '../types/api';
 import { fetchDatasets, fetchLocations, fetchPlaces } from '../services/apiClient';
-import { CATEGORY_ICONS, CATEGORY_LABELS, THEMES } from '../constants';
+import { CATEGORY_LABELS, THEMES, TRANSPORT_LABELS } from '../constants';
+import { CategoryTag } from '../components/Icons';
 import type { Theme } from '../constants';
 import { defaultTimes, resultUrl } from '../utils/plan';
+import { ArrowRight, CalendarClock, CloudSun, Coins, Repeat, Sun, UtensilsCrossed } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import DataCounter from '../components/DataCounter';
 import PlaceImage from '../components/PlaceImage';
 
@@ -12,6 +15,22 @@ const bgImages = [
     '/images/main/1.png',
     '/images/main/2.png',
     '/images/main/3.png'
+];
+
+// Co plánovač skutečně hlídá (funkce backendu)
+const FEATURES: [LucideIcon, string][] = [
+    [CalendarClock, 'Otevírací dobu – když je zavřeno, počkáme'],
+    [Sun, 'Sezónu koupališť, lanových center a rozhleden'],
+    [CloudSun, 'Hodinovou předpověď počasí u každé zastávky'],
+    [UtensilsCrossed, 'Oběd mezi 11:30 a 14:00'],
+    [Coins, 'Rozpočet a vstupné'],
+    [Repeat, 'Čas na návrat zpět do startu'],
+];
+
+const STEPS: [string, string][] = [
+    ['Řekni, kdy a jak', 'Datum, kolik máš času, odkud vyrážíš a jestli pojedeš autem, na kole, nebo půjdeš pěšky.'],
+    ['Vyber, co tě baví', 'Památky, příroda, zábava pro děti, jídlo – a k tomu rozpočet nebo náročnost.'],
+    ['Dostaneš hotový plán', 'Časový harmonogram, mapa trasy, počasí a u každé zastávky navigace do Mapy.cz. Plán můžeš sdílet nebo uložit do kalendáře.'],
 ];
 
 // Náhodný výběr míst s fotkou pro "Věděli jste?"
@@ -109,21 +128,40 @@ export default function Home() {
             {/* Tematické výlety */}
             <section className="py-16 md:py-20 px-4 bg-white">
                 <div className="container mx-auto max-w-6xl">
-                    <h2 className="text-3xl md:text-4xl font-bold text-primary-dark mb-3 text-center">Výlet na jedno kliknutí</h2>
-                    <p className="text-center text-gray-600 mb-10 text-lg">Nevíš, kam vyrazit? Vyber si téma a plán dostaneš hned.</p>
-                    {themeError && <p className="bg-red-100 text-red-700 p-3 rounded-xl mb-6 text-center">{themeError}</p>}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                        {THEMES.map(theme => (
-                            <button key={theme.title} onClick={() => startTheme(theme)} disabled={themeLoading !== null}
-                                className="text-left bg-secondary hover:bg-primary hover:text-white group p-6 rounded-3xl shadow-sm hover:shadow-xl transition transform hover:-translate-y-1 disabled:opacity-60">
-                                <span className="text-4xl">{theme.icon}</span>
-                                <h3 className="text-xl font-bold mt-3 mb-2 text-primary-dark group-hover:text-white">{theme.title}</h3>
-                                <p className="text-gray-600 group-hover:text-white/90">{theme.description}</p>
-                                <p className="mt-4 font-semibold text-primary group-hover:text-accent">
-                                    {themeLoading === theme.title ? 'Plánuji…' : 'Naplánovat →'}
-                                </p>
-                            </button>
-                        ))}
+                    <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-2 mb-8">
+                        <div>
+                            <p className="text-sm font-semibold uppercase tracking-widest text-primary">Inspirace</p>
+                            <h2 className="text-3xl md:text-4xl font-bold text-primary-dark mt-1">Hotové výlety</h2>
+                        </div>
+                        <p className="text-gray-600 md:max-w-sm md:text-right">Vyber trasu a plán na dnešek dostaneš hned. Upravit ho můžeš kdykoli v průvodci.</p>
+                    </div>
+                    {themeError && <p className="bg-red-100 text-red-700 p-3 rounded-xl mb-6">{themeError}</p>}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+                        {THEMES.map(theme => {
+                            const photo = places.find(p => p.name === theme.photoPlace);
+                            return (
+                                <button key={theme.title} onClick={() => startTheme(theme)} disabled={themeLoading !== null}
+                                    className="group relative h-96 rounded-2xl overflow-hidden text-left shadow-md hover:shadow-2xl transition disabled:opacity-70 focus:outline-none focus-visible:ring-4 focus-visible:ring-accent">
+                                    <PlaceImage src={photo?.image_url} alt={theme.photoPlace} category={photo?.category ?? 'SIGHTSEEING'}
+                                        credit="top" className="absolute inset-0 w-full h-full"
+                                        imgClassName="transition-transform duration-700 group-hover:scale-105" />
+                                    <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/35 to-transparent" />
+                                    <div className="absolute inset-x-0 bottom-0 p-6 text-white">
+                                        <p className="text-xs font-semibold uppercase tracking-wider text-white/75">
+                                            {theme.start} · {TRANSPORT_LABELS[theme.request.transport_mode].toLowerCase()}
+                                        </p>
+                                        <h3 className="text-2xl font-bold leading-tight mt-1">{theme.title}</h3>
+                                        <p className="text-sm text-white/85 mt-2 leading-relaxed">{theme.description}</p>
+                                        <span className="mt-4 inline-flex items-center gap-2 font-semibold text-accent">
+                                            {themeLoading === theme.title ? 'Plánuji…' : 'Naplánovat'}
+                                            <svg className="w-4 h-4 transition-transform group-hover:translate-x-1" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                                                <path fillRule="evenodd" d="M3 10a1 1 0 011-1h9.586l-3.293-3.293a1 1 0 111.414-1.414l5 5a1 1 0 010 1.414l-5 5a1 1 0 11-1.414-1.414L13.586 11H4a1 1 0 01-1-1z" clipRule="evenodd" />
+                                            </svg>
+                                        </span>
+                                    </div>
+                                </button>
+                            );
+                        })}
                     </div>
                 </div>
             </section>
@@ -139,7 +177,7 @@ export default function Home() {
                                 <Link key={p.id} to={`/misto/${p.id}`} className="bg-white rounded-3xl overflow-hidden shadow-sm hover:shadow-xl transition transform hover:-translate-y-1">
                                     <PlaceImage src={p.image_url} alt={p.name} category={p.category} className="w-full h-44" />
                                     <div className="p-5">
-                                        <p className="text-sm text-gray-500">{CATEGORY_ICONS[p.category]} {CATEGORY_LABELS[p.category]}</p>
+                                        <p className="text-sm text-gray-500"><CategoryTag category={p.category} label={CATEGORY_LABELS[p.category]} /></p>
                                         <h3 className="font-bold text-primary-dark text-lg leading-snug mt-1">{p.name}</h3>
                                     </div>
                                 </Link>
@@ -154,34 +192,48 @@ export default function Home() {
                 </section>
             )}
 
-            {/* O aplikaci */}
-            <section className="py-16 md:py-24 px-4 bg-white">
-                <div className="container mx-auto max-w-5xl text-center">
-                    <h2 className="text-3xl md:text-4xl font-bold text-primary-dark mb-6">Proč plánovat s KrušnoPlánem?</h2>
-                    <p className="text-lg md:text-xl text-gray-700 leading-relaxed mb-12">
-                        Jsme průvodce pro každého, kdo chce cestovat bez starostí s dlouhým hledáním. Stačí nám říct, zda máte rádi hrady, přírodu, gastronomii, nebo spíše aktivní odpočinek. KrušnoPlán vypočítá nejlepší možnou trasu a vezme v úvahu, kdy vyrazíte i jak dlouho chcete na místě zůstat.
-                    </p>
-                </div>
-            </section>
-
-            {/* Další sekce - Jak to funguje */}
-            <section id="jak-to-funguje" className="py-16 md:py-24 px-4 bg-secondary">
-                <div className="container mx-auto">
-                    <h2 className="text-3xl md:text-4xl font-bold text-primary-dark mb-12 text-center md:mb-16">Jak to funguje</h2>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-8 lg:gap-12">
-                        <div className="bg-white p-8 md:p-10 rounded-3xl text-center shadow-lg">
-                            <h3 className="text-2xl font-bold mb-4 text-primary-dark">Zadej preference</h3>
-                            <p className="text-gray-600 text-lg">Zvolíš si datum, časové okno, způsob dopravy (auto/kolo/pěšky) a kategorie, které tě zajímají. Třeba památky, výhledy nebo adrenalin.</p>
-                        </div>
-                        <div className="bg-white p-8 md:p-10 rounded-3xl text-center shadow-lg">
-                            <h3 className="text-2xl font-bold mb-4 text-primary-dark">Chytrý algoritmus</h3>
-                            <p className="text-gray-600 text-lg">Plánovač projde stovky míst z otevřených dat Karlovarského kraje a sestaví itinerář, kde přesně víš, kolik času strávíš cestou a na místech.</p>
-                        </div>
-                        <div className="bg-white p-8 md:p-10 rounded-3xl text-center shadow-lg">
-                            <h3 className="text-2xl font-bold mb-4 text-primary-dark">Vyraz za zážitky</h3>
-                            <p className="text-gray-600 text-lg">Užij si bezstarostný výlet podle plánu. Přizpůsobili jsme vše tvým možnostem, stačí jen následovat harmonogram.</p>
-                        </div>
+            {/* Jak to funguje */}
+            <section id="jak-to-funguje" className="py-16 md:py-24 px-4 bg-white scroll-mt-24">
+                <div className="container mx-auto max-w-6xl grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-16 items-start">
+                    <div>
+                        <p className="text-sm font-semibold uppercase tracking-widest text-primary">Jak to funguje</p>
+                        <h2 className="text-3xl md:text-4xl font-bold text-primary-dark mt-1 mb-5 leading-tight">
+                            Celý den naplánovaný za pár vteřin
+                        </h2>
+                        <p className="text-lg text-gray-700 leading-relaxed mb-8">
+                            Nemusíš procházet desítky webů a hlídat, co má kdy otevřeno. KrušnoPlán vezme místa z otevřených dat
+                            Karlovarského kraje a poskládá z nich trasu, která se ti vejde do dne.
+                        </p>
+                        <p className="font-semibold text-primary-dark mb-3">Na co myslíme za tebe</p>
+                        <ul className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3 mb-10">
+                            {FEATURES.map(([Icon, text]) => (
+                                <li key={text} className="flex items-start gap-3 text-gray-700">
+                                    <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-secondary text-primary shrink-0">
+                                        <Icon size={18} strokeWidth={2.25} aria-hidden="true" />
+                                    </span>
+                                    <span className="pt-1">{text}</span>
+                                </li>
+                            ))}
+                        </ul>
+                        <Link to="/wizard" className="inline-flex items-center gap-2 bg-accent text-primary-dark px-8 py-4 rounded-full font-bold hover:bg-yellow-400 transition shadow-md">
+                            Naplánovat výlet <ArrowRight size={20} aria-hidden="true" />
+                        </Link>
                     </div>
+
+                    <ol className="relative">
+                        {STEPS.map(([title, text], i) => (
+                            <li key={title} className="relative pl-20 pb-10 last:pb-0">
+                                {i < STEPS.length - 1 && <span className="absolute left-7 top-14 bottom-0 w-0.5 bg-secondary" aria-hidden="true" />}
+                                <span className="absolute left-0 top-0 flex items-center justify-center w-14 h-14 rounded-2xl bg-primary text-accent text-2xl font-extrabold shadow-md">
+                                    {i + 1}
+                                </span>
+                                <div className="bg-secondary/60 rounded-2xl p-6">
+                                    <h3 className="text-xl font-bold text-primary-dark mb-2">{title}</h3>
+                                    <p className="text-gray-700 leading-relaxed">{text}</p>
+                                </div>
+                            </li>
+                        ))}
+                    </ol>
                 </div>
             </section>
         </div>

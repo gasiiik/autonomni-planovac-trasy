@@ -8,9 +8,11 @@ Každá vrstva (zámky, hrady, muzea, rozhledny, prameny, pivovary, ...) se stá
 - Import je opakovatelný: záznamy se párují podle external_id ("<služba>:<OBJECTID>"), takže
   další spuštění data jen aktualizuje (žádné duplicity).
 - Obce, které ještě nemáme v tabulce locations, se automaticky založí.
-- Fotky: DataZápad je neobsahuje, proto se dohledávají na Wikipedii - ale JEN pokud článek
-  opravdu odpovídá danému místu (shoda názvu + vzdálenost do 300 m). Jinak se fotka nevloží
-  a frontend zobrazí ikonu kategorie (lepší žádná fotka než špatná fotka).
+- Fotky: DataZápad je neobsahuje, proto se dohledávají na Wikipedii/Commons - ale JEN pokud článek
+  opravdu odpovídá danému místu (shoda názvu + vzdálenost). Když tam nejsou, použije se náhledový
+  obrázek (og:image) z oficiálního webu místa uvedeného v DataZápadu, případně první velká fotka
+  na té stránce (bez log, ikon, erbů a plakátů). Před weby mají přednost fotky z Wikidat.
+  Jinak frontend zobrazí ikonu kategorie (lepší žádná fotka než špatná fotka).
 
 - Z dat se čte přístupnost (nepřístupné objekty vypadnou, zavřené zámky jsou jen "zastávka zvenku"),
   vstupné, otevírací doba, sezóna (lanová centra, rozhledny, koupaliště), adresa a popis.
@@ -20,6 +22,7 @@ Každá vrstva (zámky, hrady, muzea, rozhledny, prameny, pivovary, ...) se stá
 Spuštění (v kontejneru):  docker exec backend-python_engine-1 python scripts/import_datazapad.py
     --no-images   bez dohledávání fotek (rychlé, dříve nalezené fotky zůstanou)
     --dry-run     jen vypíše, co by se importovalo, do DB nesahá
+    --refresh-images  znovu dohledá i fotky, které už místa mají
 """
 import os
 import sys
@@ -28,6 +31,7 @@ import math
 import re
 import unicodedata
 import time
+import collections
 import urllib.error
 import urllib.request
 import urllib.parse
@@ -57,8 +61,8 @@ USER_AGENT = "KrusnoPlan/1.0 (https://github.com/gasiiik/autonomni-planovac-tras
 #   open/close = typická otevírací doba (DataZápad ji strojově neuvádí)
 LAYERS = [
     # --- Památky / Sightseeing ---
-    {"service": "Zámky_v_Karlovarském_kraji_WFL1", "category": "SIGHTSEEING", "duration": 90, "price": 150, "indoor": 1, "open": "09:00", "close": "17:00", "tags": "ZAMEK"},
-    {"service": "Hrady__tvrze_a_zříceniny_v_Karlovarském_kraji_WFL1", "category": "SIGHTSEEING", "duration": 60, "price": 120, "indoor": 0, "open": "09:00", "close": "18:00", "tags": "HRAD"},
+    {"service": "Zámky_v_Karlovarském_kraji_WFL1", "category": "SIGHTSEEING", "duration": 90, "price": 150, "indoor": 1, "open": "09:00", "close": "17:00", "tags": "ZAMEK", "kind": "Zámek"},
+    {"service": "Hrady__tvrze_a_zříceniny_v_Karlovarském_kraji_WFL1", "category": "SIGHTSEEING", "duration": 60, "price": 120, "indoor": 0, "open": "09:00", "close": "18:00", "tags": "HRAD", "kind": "Hrad"},
     {"service": "Muzea_a_galerie_v_KVK_WFL1", "category": "SIGHTSEEING", "duration": 60, "price": 100, "indoor": 1, "open": "10:00", "close": "17:00", "tags": "MUZEUM"},
     {"service": "Muzea_v_přírodě_a_skanzeny_v_KVK_WFL1", "category": "SIGHTSEEING", "duration": 75, "price": 80, "indoor": 0, "open": "09:00", "close": "17:00", "tags": "SKANZEN"},
     {"service": "Národní_kulturní_památky_v_KVK_WFL1", "category": "SIGHTSEEING", "duration": 45, "price": 0, "indoor": 0, "open": "00:00", "close": "23:59", "tags": "NKP"},
@@ -72,13 +76,13 @@ LAYERS = [
     {"service": "ZOO_a_zooparky_v_Karlovarském_kraji_WFL1", "category": "FUN", "duration": 120, "price": 150, "indoor": 0, "open": "09:00", "close": "17:00", "tags": "ZOO"},
     {"service": "Lanová_a_zábavní_centra_v_KVK_WFL1", "category": "FUN", "duration": 90, "price": 250, "indoor": 0, "open": "10:00", "close": "18:00", "tags": "LANOVKA", "difficulty": "MEDIUM"},
     {"service": "Aquaparky__koupaliště_a_bazény_v_Karlovarském_kraji_WFL1", "category": "FUN", "duration": 120, "price": 200, "indoor": 1, "open": "09:00", "close": "21:00", "tags": "AQUAPARK"},
-    {"service": "Solné_jeskyně_v_Karlovarském_kraji_WFL1", "category": "FUN", "duration": 50, "price": 150, "indoor": 1, "open": "10:00", "close": "19:00", "tags": "WELLNESS"},
+    {"service": "Solné_jeskyně_v_Karlovarském_kraji_WFL1", "category": "FUN", "duration": 50, "price": 150, "indoor": 1, "open": "10:00", "close": "19:00", "tags": "WELLNESS", "kind": "Solná jeskyně"},
     {"service": "Agroturistické_destinace_v_KVK_WFL1", "category": "FUN", "duration": 75, "price": 0, "indoor": 0, "open": "09:00", "close": "17:00", "tags": "FARMA"},
     # --- Příroda ---
     {"service": "Přírodní_pozoruhodnosti_v_KVK_WFL1", "category": "PARK", "duration": 60, "price": 0, "indoor": 0, "open": "00:00", "close": "23:59", "tags": "PRIRODA", "difficulty": "MEDIUM"},
     {"service": "Botanické_zahrady_a_arboreta_v_Karlovarském_kraji_WFL1", "category": "PARK", "duration": 60, "price": 60, "indoor": 0, "open": "09:00", "close": "18:00", "tags": "ZAHRADA"},
     # --- Gastro ---
-    {"service": "Pivovarnictví_v_Karlovarském_kraji_WFL1", "category": "GASTRO", "duration": 60, "price": 200, "indoor": 1, "open": "11:00", "close": "22:00", "tags": "PIVOVAR,RESTAURACE", "family": 1},
+    {"service": "Pivovarnictví_v_Karlovarském_kraji_WFL1", "category": "GASTRO", "duration": 60, "price": 200, "indoor": 1, "open": "11:00", "close": "22:00", "tags": "PIVOVAR,RESTAURACE", "family": 1, "kind": "Pivovar"},
 ]
 
 # Klíče, které začínají "název_", ale NEJSOU názvem objektu
@@ -346,7 +350,12 @@ def build_description(cfg, a, status):
     else:
         kind = first(a, "typ", "typ_atraktivity", "typ_centra", "typ_památky")
         flags = [lbl for k, lbl in _FLAG_LABELS.items() if is_true(a.get(k))]
+        # Vrstvy bez typu (pivovary, solné jeskyně...) -> obecný typ z konfigurace, ať popis není jen název sady
+        if not kind and not flags:
+            kind = cfg.get("kind")
         head = ", ".join(x for x in [kind] + flags if x)
+        if head and a.get("název_obce"):
+            head += f" v obci {a['název_obce']}"
         protection = first(a, "památková_ochrana", "památka")
         if protection and protection.startswith("není"):
             protection = None
@@ -481,7 +490,12 @@ def dedupe(pois):
         dup = None
         for k in kept:
             other = key_tokens(k)
-            if toks and other and k["category"] == poi["category"]                     and haversine_m(poi["lat"], poi["lng"], k["lat"], k["lng"]) < 150                     and len(toks & other) / min(len(toks), len(other)) >= 0.5:
+            dist = haversine_m(poi["lat"], poi["lng"], k["lat"], k["lng"])
+            # Stejný název do 1 km = stejné místo (u "Hrad a zámek Bečov nad Teplou" po odečtení obce
+            # a obecných slov nezbude žádné klíčové slovo, takže by ho slovní porovnání nezachytilo)
+            same_name = normalize(poi["name"]).split() == normalize(k["name"]).split() and dist < 1000
+            similar = toks and other and k["category"] == poi["category"] and dist < 150                 and len(toks & other) / min(len(toks), len(other)) >= 0.5
+            if same_name or similar:
                 dup = k
                 break
         if not dup:
@@ -542,6 +556,126 @@ def wiki_image(poi):
                           lambda page: (page.get("imageinfo") or [{}])[0].get("thumburl"))
     except Exception:
         return None
+
+
+_RE_OG_IMAGE = re.compile(
+    r'<meta[^>]+(?:property|name)=["\'](?:og:image|twitter:image)(?::url)?["\'][^>]*content=["\']([^"\']+)'
+    r'|<meta[^>]+content=["\']([^"\']+)["\'][^>]*(?:property|name)=["\'](?:og:image|twitter:image)(?::url)?["\']', re.I)
+# Loga, ikony a vektorové obrázky nejsou fotka místa; odkazy z Facebooku po čase přestanou fungovat
+_BAD_IMAGE = re.compile(r"logo|icon|favicon|placeholder|default|fbcdn|pexels|unsplash|shutterstock|pixabay|stock|\.svg|\.ico|\.gif", re.I)
+MIN_PHOTO_BYTES = 20000  # menší soubor bývá logo nebo ikona
+
+
+def website_image(poi):
+    """Náhledový obrázek (og:image) z oficiálního webu místa uvedeného v DataZápadu.
+    Záložní zdroj, když fotka není na Wikipedii/Commons. Obrázek patří provozovateli webu."""
+    site = poi.get("website")
+    if not site or not site.startswith("http"):
+        return None
+    try:
+        req = urllib.request.Request(site, headers={"User-Agent": "Mozilla/5.0 " + USER_AGENT})
+        with urllib.request.urlopen(req, timeout=8) as resp:
+            html = resp.read(400000).decode("utf-8", "ignore")
+        m = _RE_OG_IMAGE.search(html)
+        if not m:
+            return None
+        img = urllib.parse.urljoin(site, (m.group(1) or m.group(2)).strip().replace("&amp;", "&"))
+        if not img.startswith("http") or _BAD_IMAGE.search(img):
+            return None
+        # Ověříme, že obrázek existuje a není to malá ikona
+        head = urllib.request.Request(img, method="HEAD", headers={"User-Agent": "Mozilla/5.0 " + USER_AGENT})
+        with urllib.request.urlopen(head, timeout=8) as resp:
+            ctype = resp.headers.get("Content-Type", "")
+            size = int(resp.headers.get("Content-Length") or 0)
+        if ctype and not ctype.startswith("image/"):
+            return None
+        if size and size < MIN_PHOTO_BYTES:
+            return None
+        return img[:2000]
+    except Exception:
+        return None
+
+
+# Slova určující typ objektu - blízký objekt z Wikidat bereme, jen když je stejného typu
+_TYPE_WORDS = {"muzeum", "galerie", "hrad", "zamek", "zamecek", "kostel", "kaple", "klaster", "rozhledna", "pramen",
+               "kyselka", "studanka", "tvrz", "zricenina", "vez", "pivovar", "minipivovar", "synagoga", "mlyn",
+               "minimuzeum", "bazilika", "hvezdarna", "skanzen", "kolonada"}
+
+
+def _words(s):
+    return set(normalize(s).split())
+
+
+def wikidata_image(poi):
+    """Fotka (P18) objektu z Wikidat do 300 m od místa. Objekt musí odpovídat názvem, nebo být do 80 m
+    a stejného typu (muzeum, hrad...). Samotnou obec ("Abertamy") nebereme - fotka náměstí není fotka muzea."""
+    query = f"""SELECT ?label ?image ?dist WHERE {{
+      SERVICE wikibase:around {{ ?item wdt:P625 ?loc . bd:serviceParam wikibase:center "Point({poi['lng']} {poi['lat']})"^^geo:wktLiteral .
+        bd:serviceParam wikibase:radius "0.3" . bd:serviceParam wikibase:distance ?dist . }}
+      ?item wdt:P18 ?image . ?item rdfs:label ?label . FILTER(LANG(?label) = "cs")
+    }} ORDER BY ?dist LIMIT 25"""
+    try:
+        data = http_json("https://query.wikidata.org/sparql?format=json&query=" + urllib.parse.quote(query), timeout=20)
+    except Exception:
+        return None
+    obec = poi.get("obec") or ""
+    key = tokens(poi["name"]) - tokens(obec)
+    name_words = _words(poi["name"])
+    for b in data.get("results", {}).get("bindings", []):
+        label, dist = b["label"]["value"], float(b["dist"]["value"]) * 1000
+        if normalize(label).strip() == normalize(obec).strip():
+            continue  # položka celé obce
+        lt = tokens(label) - tokens(obec)
+        same_name = key and lt and len(key & lt) / min(len(key), len(lt)) >= 0.5
+        label_words = _words(label)
+        same_type = dist < 80 and (name_words & label_words & _TYPE_WORDS)
+        contained = dist < 80 and label_words and label_words <= name_words  # "Kynžvart" v "Zřícenina hradu Kynžvart"
+        if same_name or same_type or contained:
+            return b["image"]["value"].replace("http://", "https://") + "?width=800"
+    return None
+
+
+_RE_PAGE_IMG = re.compile(r'<img[^>]+(?:data-src|src)=["\']([^"\']+\.(?:jpe?g|webp)(?:\?[^"\']*)?)["\']', re.I)
+# Grafika stránky, ne fotka místa (pozadí, záhlaví, erb obce, plakát, pozvánka...)
+_BAD_PAGE_IMG = re.compile(r"banner|header|\bbg\b|bg[-_.]|background|sprite|flag|vlajk|erb|znak|crest|wappen|ikon|"
+                           r"pozvank|plakat|poster|letak|flyer|[-_]a[45][-_.]|program|titulka|regioncard|card.|reklam|mapa|plan[-_]", re.I)
+# Ručně ověřené špatné shody (fotka sousedního objektu) - název souboru po dekódování URL
+_BLOCKED_IMAGES = ("Bečov náměstí úřad",)
+MIN_PAGE_PHOTO_BYTES = 40000
+
+
+def page_image(poi):
+    """První velká fotka (JPG/WebP) na oficiální stránce místa - když web nemá náhledový obrázek."""
+    site = poi.get("website")
+    if not site or not site.startswith("http"):
+        return None
+    try:
+        req = urllib.request.Request(site, headers={"User-Agent": "Mozilla/5.0 " + USER_AGENT})
+        with urllib.request.urlopen(req, timeout=8) as resp:
+            html = resp.read(600000).decode("utf-8", "ignore")
+    except Exception:
+        return None
+    for src in _RE_PAGE_IMG.findall(html)[:15]:
+        img = urllib.parse.urljoin(site, src.replace("&amp;", "&"))
+        if _BAD_IMAGE.search(img) or _BAD_PAGE_IMG.search(img):
+            continue
+        try:
+            head = urllib.request.Request(img, method="HEAD", headers={"User-Agent": "Mozilla/5.0 " + USER_AGENT})
+            with urllib.request.urlopen(head, timeout=8) as resp:
+                if resp.headers.get("Content-Type", "").startswith("image/") \
+                        and int(resp.headers.get("Content-Length") or 0) >= MIN_PAGE_PHOTO_BYTES:
+                    return img[:2000]
+        except Exception:
+            continue
+    return None
+
+
+def find_image(poi):
+    """Nejdřív volné licence (Wikipedie, Commons, Wikidata), pak oficiální web místa z DataZápadu."""
+    img = wiki_image(poi) or wikidata_image(poi) or website_image(poi) or page_image(poi)
+    if img and any(b in urllib.parse.unquote(img) for b in _BLOCKED_IMAGES):
+        return None
+    return img
 
 
 def best_match(data, name_tokens, get_thumb):
@@ -605,7 +739,7 @@ def resolve_location(db, poi, loc_cache, created):
     return min(loc_cache.values(), key=lambda l: haversine_m(poi["lat"], poi["lng"], l.lat, l.lng))
 
 
-def run_import(with_images=True, dry_run=False):
+def run_import(with_images=True, dry_run=False, refresh_images=False):
     print("⏳ Stahuji turistické cíle z DataZápad (ArcGIS REST API)...")
     pois = []
     fetched_services = set()  # jen u úspěšně stažených vrstev smíme mazat zaniklé záznamy
@@ -636,11 +770,25 @@ def run_import(with_images=True, dry_run=False):
 
     ensure_schema()
     if with_images:
-        print("🖼️  Dohledávám fotky na Wikipedii a Wikimedia Commons (jen jisté shody)...")
+        # Místa, která fotku už mají, nehledáme znovu (týdenní automatický import je pak rychlý)
+        known = {}
+        if not refresh_images:
+            with engine.connect() as conn:
+                known = dict(conn.execute(text(
+                    "SELECT external_id, image_url FROM activity_pois WHERE source = 'DATAZAPAD' AND image_url <> ''")).all())
+        missing = [p for p in pois if not known.get(p["external_id"])]
+        for p in pois:
+            p["image_url"] = known.get(p["external_id"])
+        print(f"🖼️  Dohledávám fotky pro {len(missing)} míst (Wikipedie, Commons, oficiální web místa)...")
         with ThreadPoolExecutor(max_workers=2) as pool:  # víc vláken = HTTP 429 od Wikipedie
-            for poi, img in zip(pois, pool.map(wiki_image, pois)):
+            for poi, img in zip(missing, pool.map(find_image, missing)):
                 poi["image_url"] = img
-        print(f"   ✔ Fotka nalezena u {sum(1 for p in pois if p.get('image_url'))} míst.")
+        # Stejná fotka z webu u více míst = obecná fotka řetězce/firmy, ne fotka konkrétního místa
+        web_counts = collections.Counter(p["image_url"] for p in pois if p.get("image_url") and "wikimedia" not in p["image_url"])
+        for p in pois:
+            if p.get("image_url") and web_counts.get(p["image_url"], 0) > 1:
+                p["image_url"] = None
+        print(f"   ✔ Fotku má {sum(1 for p in pois if p.get('image_url'))} z {len(pois)} míst.")
 
     db = SessionLocal()
     try:
@@ -651,10 +799,14 @@ def run_import(with_images=True, dry_run=False):
         added = updated = skipped = 0
         created = {}
         used_per_service = {}
+        donor_images = {}  # fotka ze shodného místa v DataZápadu pro ruční záznam bez fotky
         for poi in pois:
             # Duplicita s ručně zadaným místem (např. "Hrad Loket") -> ruční záznam má přednost
-            if any(haversine_m(poi["lat"], poi["lng"], m.lat, m.lng) < 120 and (tokens(poi["name"]) & tokens(m.name))
-                   for m in manual):
+            twin = next((m for m in manual if haversine_m(poi["lat"], poi["lng"], m.lat, m.lng) < 120
+                         and (tokens(poi["name"]) & tokens(m.name))), None)
+            if twin:
+                if poi.get("image_url"):
+                    donor_images.setdefault(twin.id, poi["image_url"])
                 skipped += 1
                 continue
             svc = poi["external_id"].split(":")[0]
@@ -676,6 +828,15 @@ def run_import(with_images=True, dry_run=False):
             else:
                 db.add(ActivityPOI(**fields))
                 added += 1
+
+        # Ručně zadaná místa měla ilustrační fotky (picsum/unsplash), ne fotky těch míst -> skutečná fotka, nebo žádná
+        if with_images:
+            placeholders = [m for m in manual if m.image_url and re.search(r"picsum\.photos|unsplash\.com", m.image_url)]
+            for m in placeholders:
+                loc_name = next((l.name for l in loc_cache.values() if l.id == m.location_id), None)
+                m.image_url = find_image({"name": m.name, "lat": m.lat, "lng": m.lng, "obec": loc_name, "website": m.website})                     or donor_images.get(m.id)
+            if placeholders:
+                print(f"   ✔ Ilustrační fotky u ručních míst nahrazeny: {sum(1 for m in placeholders if m.image_url)} z {len(placeholders)}")
 
         # Záznamy, které z DataZápad zmizely nebo je nově vyřazujeme (nepřístupné, duplicity) -> smazat
         imported = {p["external_id"] for p in pois}
@@ -704,4 +865,5 @@ def run_import(with_images=True, dry_run=False):
 
 
 if __name__ == "__main__":
-    run_import(with_images="--no-images" not in sys.argv, dry_run="--dry-run" in sys.argv)
+    run_import(with_images="--no-images" not in sys.argv, dry_run="--dry-run" in sys.argv,
+               refresh_images="--refresh-images" in sys.argv)

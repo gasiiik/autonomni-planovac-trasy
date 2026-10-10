@@ -49,6 +49,7 @@ class PlanRequest(BaseModel):
     difficulty: Optional[str] = "EASY"
     participants_count: Optional[int] = 1
     has_children: Optional[bool] = False
+    indoor_when_rain: Optional[bool] = False # při dešti jen místa uvnitř (volba uživatele)
 
 def haversine_distance(lat1, lon1, lat2, lon2):
     R = 6371.0
@@ -173,11 +174,12 @@ def generate_plan(req: PlanRequest, db: Session = Depends(get_db)):
     except ValueError:
         raise HTTPException(status_code=400, detail="Čas musí být ve formátu 'YYYY-MM-DD HH:MM:SS'.")
 
-    # Validace: Nelze plánovat do minulosti (porovnáváme v českém čase, ne v UTC kontejneru)
+    # Validace: Nelze plánovat do minulosti (porovnáváme v českém čase, ne v UTC kontejneru).
+    # Tolerance 5 minut: odjezd "teď" zadaný na minuty je o pár sekund starší, než když dorazí požadavek.
     now = datetime.now(LOCAL_TZ).replace(tzinfo=None)
     if t_from.date() < now.date():
         raise HTTPException(status_code=400, detail="Nelze plánovat trasu na datum v minulosti.")
-    if t_from.date() == now.date() and t_from.time() < now.time():
+    if t_from < now - timedelta(minutes=5):
         raise HTTPException(status_code=400, detail="Nelze plánovat trasu na čas, který již dnes proběhl.")
 
     total_mins = int((t_to - t_from).total_seconds() / 60)
@@ -205,15 +207,18 @@ def generate_plan(req: PlanRequest, db: Session = Depends(get_db)):
     if weather_status == "UNKNOWN":
         weather_message = "Předpověď počasí se nepodařilo načíst, plánujeme bez ohledu na počasí."
 
-    if weather_status == "BAD_WEATHER":
-        weather_message = "V destinaci prší/sněží! Trasa byla automaticky upravena a zaměřena na vnitřní aktivity."
+    if weather_status == "BAD_WEATHER" and not req.indoor_when_rain:
+        # Uživatel si vybírá sám - plán neměníme, jen upozorníme (místa uvnitř frontend označí)
+        weather_message = "Podle předpovědi bude pršet – vezměte si deštník. Místa uvnitř jsou v plánu označená."
+    elif weather_status == "BAD_WEATHER":
+        weather_message = "Podle předpovědi bude pršet, plán jsme proto zaměřili na místa uvnitř."
         # Vyfiltrujeme venkovní aktivity (příznak indoor z DataZápad), pokud máme z čeho jiného vybírat
         indoor_pois = [p for p in pois if p.indoor or p.category == "GASTRO"]
         # Jen restaurace by nebyl výlet -> potřebujeme aspoň jednu vnitřní aktivitu
         if any(p.category != "GASTRO" for p in indoor_pois):
             pois = indoor_pois
         else:
-            weather_message = "V destinaci prší/sněží, ale pro zvolené preference nemáme vnitřní alternativy – vezměte si deštník!"
+            weather_message = "Podle předpovědi bude pršet, ale pro zvolené preference nemáme místa uvnitř – vezměte si deštník!"
 
     sources = dataset_sources(db)
 
@@ -241,6 +246,7 @@ def generate_plan(req: PlanRequest, db: Session = Depends(get_db)):
         closest_poi = None
         min_dist = float('inf')
         feasible = [] # (vzdálenost, POI) - místa, která splňují všechny podmínky
+        next_departure = None # nejbližší čas odjezdu, kdy by se dalo stihnout otevření dosud zavřeného místa
 
         for p in unvisited:
             # 1b. Rozmanitost - stejného typu nejvýš MAX_SAME_TYPE míst
@@ -263,6 +269,9 @@ def generate_plan(req: PlanRequest, db: Session = Depends(get_db)):
                     wait = math.ceil((open_dt - arrival_time).total_seconds() / 60)
                     if wait > MAX_WAIT_MINS:
                         skip_reasons.add("otevírací doba")
+                        depart = open_dt - timedelta(minutes=travel_approx)
+                        if next_departure is None or depart < next_departure:
+                            next_departure = depart
                         continue
                 # Prohlídku musíme stihnout před zavíračkou
                 if arrival_time + timedelta(minutes=wait + p.est_duration_mins) > close_dt:
@@ -323,6 +332,20 @@ def generate_plan(req: PlanRequest, db: Session = Depends(get_db)):
             else:
                 pool = feasible
             _, min_dist, closest_poi, wait_mins = min(pool, key=lambda fp: fp[0])
+
+        # Teď nic otevřeného není (např. odjezd v noci) -> volno do otevření prvních míst a zkusíme znovu
+        if closest_poi is None and next_departure and current_time < next_departure < t_to:
+            idle = math.ceil((next_departure - current_time).total_seconds() / 60)
+            itinerary.append({
+                "type": "wait",
+                "start": current_time.strftime("%H:%M"),
+                "end": next_departure.strftime("%H:%M"),
+                "title": f"Volno do otevření prvních míst ({next_departure:%H:%M})",
+                "duration_mins": idle
+            })
+            current_time = next_departure
+            remaining_mins -= idle
+            continue
 
         # Pokud už není žádná památka otevřená, ukončíme hledání
         if closest_poi is None:

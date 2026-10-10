@@ -4,7 +4,7 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import type { Category, Place } from '../types/api';
 import { fetchPlaces } from '../services/apiClient';
-import { CATEGORY_COLORS, CATEGORY_ICONS, CATEGORY_LABELS } from '../constants';
+import { CATEGORY_COLORS, CATEGORY_LABELS } from '../constants';
 
 const CATEGORIES: Category[] = ['SIGHTSEEING', 'PARK', 'FUN', 'GASTRO'];
 const KV_REGION_CENTER: [number, number] = [50.17, 12.75];
@@ -68,9 +68,9 @@ export default function MapPage() {
             const img = p.image_url ? `<img src="${escapeHtml(p.image_url)}" alt="" style="width:220px;height:120px;object-fit:cover;border-radius:8px;margin-bottom:6px">` : '';
             L.circleMarker([p.lat, p.lng], {
                 radius: 7, color: '#fff', weight: 2, fillColor: CATEGORY_COLORS[p.category], fillOpacity: 0.9,
-            }).bindPopup(`${img}<div style="font-size:12px;color:#666">${CATEGORY_ICONS[p.category]} ${CATEGORY_LABELS[p.category]} · ${p.price ? `${Math.round(p.price)} Kč` : 'zdarma'}</div>
+            }).bindPopup(`${img}<div style="font-size:12px;color:#666"><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${CATEGORY_COLORS[p.category]};margin-right:5px"></span>${CATEGORY_LABELS[p.category]} · ${p.price ? `${Math.round(p.price)} Kč` : 'zdarma'}</div>
                 <strong style="font-size:14px">${escapeHtml(p.name)}</strong><br>
-                <a href="/misto/${p.id}" data-place="${p.id}" style="color:#087F78;font-weight:600">Detail místa →</a>`)
+                <a href="/misto/${p.id}" data-place="${p.id}" style="color:#087F78;font-weight:600">Detail místa</a>`)
                 .addTo(layer);
         });
     }, [filtered]);

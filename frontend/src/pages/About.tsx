@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { DatasetsResponse } from '../types/api';
+import { RefreshCw } from 'lucide-react';
 import { fetchDatasets } from '../services/apiClient';
 
 const formatDate = (iso: string) =>
@@ -43,7 +44,7 @@ export default function About() {
                         <div className="bg-secondary p-5 rounded-2xl">
                             <p className="text-sm text-gray-600">Poslední aktualizace</p>
                             <p className="text-lg font-bold text-primary-dark">{data.last_import ? formatDate(data.last_import) : '–'}</p>
-                            {data.import_running && <p className="text-xs text-primary mt-1">⏳ Právě probíhá aktualizace dat…</p>}
+                            {data.import_running && <p className="text-xs text-primary mt-1 flex items-center gap-1"><RefreshCw size={12} className="animate-spin" aria-hidden="true" /> Právě probíhá aktualizace dat…</p>}
                         </div>
                     </div>
 
@@ -96,7 +97,7 @@ export default function About() {
             <h2 className="text-2xl font-bold text-primary-dark mt-12 mb-4">Další zdroje</h2>
             <ul className="list-disc pl-6 space-y-2 text-gray-700">
                 <li>Předpověď počasí: <a href="https://open-meteo.com/" target="_blank" rel="noopener noreferrer" className="text-primary underline">Open-Meteo</a> (CC BY 4.0)</li>
-                <li>Fotky míst: <a href="https://cs.wikipedia.org/" target="_blank" rel="noopener noreferrer" className="text-primary underline">Wikipedie</a> a <a href="https://commons.wikimedia.org/" target="_blank" rel="noopener noreferrer" className="text-primary underline">Wikimedia Commons</a> – přiřazujeme je jen při shodě názvu a polohy</li>
+                <li>Fotky míst: <a href="https://cs.wikipedia.org/" target="_blank" rel="noopener noreferrer" className="text-primary underline">Wikipedie</a> a <a href="https://commons.wikimedia.org/" target="_blank" rel="noopener noreferrer" className="text-primary underline">Wikimedia Commons</a> – přiřazujeme je jen při shodě názvu a polohy. Když tam fotka není, použijeme náhledový obrázek z oficiálního webu místa uvedeného v DataZápadu (patří provozovateli webu, zdroj je uveden přímo u fotky).</li>
                 <li>Mapa: © přispěvatelé <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer" className="text-primary underline">OpenStreetMap</a></li>
             </ul>
 

@@ -44,7 +44,7 @@ Všechny sady pocházejí z [Katalogu otevřených dat Karlovarského kraje – 
 
 **Další zdroje:**
 - Předpověď počasí: [Open-Meteo](https://open-meteo.com/), CC BY 4.0
-- Fotky míst: [Wikipedie](https://cs.wikipedia.org/) a [Wikimedia Commons](https://commons.wikimedia.org/) – odkazujeme na náhledy, licence podle jednotlivých souborů (většinou CC BY-SA). Fotka se přiřadí jen při shodě názvu a polohy.
+- Fotky míst: [Wikipedie](https://cs.wikipedia.org/) a [Wikimedia Commons](https://commons.wikimedia.org/) – odkazujeme na náhledy, licence podle jednotlivých souborů (většinou CC BY-SA). Fotka se přiřadí jen při shodě názvu a polohy. Když tam fotka není, použije se náhledový obrázek (og:image) z oficiálního webu místa uvedeného v DataZápadu – patří provozovateli webu a u fotky je uveden zdroj.
 - Mapové podklady: © přispěvatelé [OpenStreetMap](https://www.openstreetmap.org/copyright), ODbL
 
 ## Použití AI

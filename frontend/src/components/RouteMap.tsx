@@ -18,6 +18,9 @@ function markerIcon(label: string, start: boolean, active = false) {
     });
 }
 
+// Vlajka startu (ikona Flag z Lucide jako SVG - značky Leafletu jsou HTML řetězce)
+const FLAG_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" x2="4" y1="22" y2="15"/></svg>';
+
 const escapeHtml = (s: string) => s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 
 interface Props {
@@ -52,7 +55,7 @@ export default function RouteMap({ waypoints, activeStop = null, onSelectStop }:
             if (w.type === 'END_LOOP') return; // návrat končí ve startu, druhá značka by ho překryla
             const isStart = w.type === 'START';
             const n = isStart ? 0 : ++stop;
-            const marker = L.marker([w.lat, w.lng], { icon: markerIcon(isStart ? '★' : String(n), isStart) })
+            const marker = L.marker([w.lat, w.lng], { icon: markerIcon(isStart ? FLAG_SVG : String(n), isStart) })
                 .bindPopup(`<strong>${escapeHtml(w.name)}</strong>${isStart ? '<br>Start' : ''}`)
                 .addTo(map);
             if (!isStart) {

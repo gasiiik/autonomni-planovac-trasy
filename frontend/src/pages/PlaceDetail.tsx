@@ -4,7 +4,9 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import type { PlaceDetail as PlaceDetailType } from '../types/api';
 import { fetchPlace } from '../services/apiClient';
-import { CATEGORY_COLORS, CATEGORY_ICONS, CATEGORY_LABELS, DIFFICULTY_LABELS, MONTHS } from '../constants';
+import { ArrowLeft, MapPin } from 'lucide-react';
+import { CATEGORY_COLORS, CATEGORY_LABELS, DIFFICULTY_LABELS, MONTHS } from '../constants';
+import { CategoryTag } from '../components/Icons';
 import PlaceImage from '../components/PlaceImage';
 
 function SmallMap({ lat, lng, color }: { lat: number; lng: number; color: string }) {
@@ -58,17 +60,19 @@ export default function PlaceDetail() {
 
     return (
         <div className="container mx-auto pt-28 pb-12 px-4 max-w-5xl">
-            <Link to="/mapa" className="text-primary font-semibold">← Mapa míst</Link>
+            <Link to="/mapa" className="inline-flex items-center gap-1 text-primary font-semibold"><ArrowLeft size={18} aria-hidden="true" /> Mapa míst</Link>
 
             <div className="mt-4 rounded-3xl overflow-hidden shadow-lg">
-                <PlaceImage src={place.image_url} alt={place.name} category={place.category} className="w-full h-64 md:h-96" />
+                {/* Bez fotky jen nízký barevný pruh - velká plocha s ikonou působila jako chyba */}
+                <PlaceImage src={place.image_url} alt={place.name} category={place.category}
+                    className={place.image_url ? 'w-full h-64 md:h-96' : 'w-full h-28 md:h-32'} />
             </div>
 
             <div className="flex flex-col lg:flex-row gap-8 mt-8">
                 <div className="lg:w-2/3">
-                    <p className="text-gray-500">{CATEGORY_ICONS[place.category]} {CATEGORY_LABELS[place.category]}</p>
+                    <p className="text-gray-500"><CategoryTag category={place.category} label={CATEGORY_LABELS[place.category]} /></p>
                     <h1 className="text-3xl md:text-4xl font-bold text-primary-dark mt-1 mb-4">{place.name}</h1>
-                    {place.address && <p className="text-gray-600 mb-4">📍 {place.address}</p>}
+                    {place.address && <p className="text-gray-600 mb-4 flex items-start gap-1.5"><MapPin size={18} className="text-primary mt-0.5 shrink-0" aria-hidden="true" /> {place.address}</p>}
                     {place.description && <p className="text-lg text-gray-700 leading-relaxed mb-6">{place.description}</p>}
 
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-6">

@@ -2,7 +2,10 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import type { ItineraryItem, PlanRequest, PlanResponse } from '../types/api';
 import { generatePlan } from '../services/apiClient';
-import { CATEGORY_ICONS, CATEGORY_LABELS, TRANSPORT_ICONS, TRANSPORT_LABELS, weatherInfo } from '../constants';
+import { CalendarPlus, Check, Clock, CloudRain, CloudSun, MapPin, Printer, Share2, Sun } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
+import { CATEGORY_LABELS, TRANSPORT_LABELS } from '../constants';
+import { CategoryTag, TransportIcon, WeatherIcon } from '../components/Icons';
 import { decodePlan } from '../utils/plan';
 import { downloadIcs } from '../utils/calendar';
 import RouteMap from '../components/RouteMap';
@@ -19,11 +22,13 @@ const WEATHER_STYLES: Record<PlanResponse['weather_status'], string> = {
     BAD_WEATHER: 'bg-blue-100 text-blue-900',
     UNKNOWN: 'bg-gray-100 text-gray-700',
 };
-const WEATHER_ICONS: Record<PlanResponse['weather_status'], string> = {
-    GOOD_WEATHER: '☀️',
-    BAD_WEATHER: '🌧️',
-    UNKNOWN: '🌤️',
+const WEATHER_ICONS: Record<PlanResponse['weather_status'], LucideIcon> = {
+    GOOD_WEATHER: Sun,
+    BAD_WEATHER: CloudRain,
+    UNKNOWN: CloudSun,
 };
+
+const ACTION_BTN = 'inline-flex items-center gap-2 px-5 py-2 rounded-full bg-secondary text-primary-dark font-semibold hover:bg-primary hover:text-white transition';
 
 // Typ trasy pro navigaci v Mapy.cz podle zvolené dopravy
 const MAPY_ROUTE_TYPE: Record<string, string> = { CAR: 'car_fast', BIKE: 'bike_road', WALK: 'foot_fast' };
@@ -47,7 +52,10 @@ function LoadingScreen() {
             <ul className="space-y-2 text-lg">
                 {LOADING_STEPS.map((text, i) => (
                     <li key={text} className={`transition-opacity duration-300 ${i <= step ? 'opacity-100' : 'opacity-0'} ${i < step ? 'text-gray-400' : 'text-primary-dark font-semibold'}`}>
-                        {i < step ? '✓' : '•'} {text}
+                        <span className="inline-flex items-center gap-2">
+                            {i < step ? <Check size={18} strokeWidth={3} aria-hidden="true" /> : <span className="w-2 h-2 rounded-full bg-primary inline-block mx-[5px]" />}
+                            {text}
+                        </span>
                     </li>
                 ))}
             </ul>
@@ -57,12 +65,12 @@ function LoadingScreen() {
 
 function TravelItem({ item }: { item: ItineraryItem }) {
     if (item.type === 'wait') {
-        return <p className="text-gray-500 text-sm">⏳ {item.title}</p>;
+        return <p className="text-gray-500 text-sm flex items-center gap-1.5"><Clock size={16} aria-hidden="true" /> {item.title}</p>;
     }
     const mode = item.mode ?? 'CAR';
     return (
-        <p className="text-gray-500 text-sm">
-            {TRANSPORT_ICONS[mode] ?? '🚗'} {item.type === 'travel_return' ? 'Návrat do výchozího bodu' : `Přesun ${TRANSPORT_LABELS[mode]?.toLowerCase() ?? ''}`}
+        <p className="text-gray-500 text-sm flex items-center gap-1.5">
+            <TransportIcon mode={mode} size={16} /> {item.type === 'travel_return' ? 'Návrat do výchozího bodu' : `Přesun ${TRANSPORT_LABELS[mode]?.toLowerCase() ?? ''}`}
             {' '}· {item.distance_km} km
         </p>
     );
@@ -71,19 +79,22 @@ function TravelItem({ item }: { item: ItineraryItem }) {
 function PoiItem({ item, order, transport }: { item: ItineraryItem; order: number; transport: string }) {
     const category = item.category;
     const cost = item.estimated_cost && item.estimated_cost > 0 ? `${Math.round(item.estimated_cost)} Kč` : 'Zdarma';
-    const weather = item.weather ? weatherInfo(item.weather.code) : null;
     const navUrl = `https://mapy.cz/fnc/v1/route?end=${item.lng},${item.lat}&routeType=${MAPY_ROUTE_TYPE[transport] ?? 'car_fast'}`;
     return (
         <div>
             <PlaceImage src={item.image_url} alt={item.title ?? ''} category={category} className="w-full h-48 rounded-xl mb-3" />
             <h3 className="text-xl font-bold text-primary-dark">{order}. {item.title}</h3>
-            <p className="text-sm text-gray-500 mb-2 flex flex-wrap gap-x-2">
-                <span>{category ? `${CATEGORY_ICONS[category] ?? ''} ${CATEGORY_LABELS[category] ?? category}` : ''}</span>
+            <p className="text-sm text-gray-500 mb-2 flex flex-wrap items-center gap-x-2 gap-y-1">
+                {category && <CategoryTag category={category} label={CATEGORY_LABELS[category] ?? category} />}
                 <span>· {cost}</span>
                 {item.indoor && <span>· uvnitř</span>}
-                {weather && <span title={`Předpověď na ${item.start}`}>· {weather.icon} {item.weather?.temp != null ? `${item.weather.temp} °C` : weather.label}</span>}
+                {item.weather && (
+                    <span className="inline-flex items-center gap-1" title={`Předpověď na ${item.start}`}>
+                        · <WeatherIcon code={item.weather.code} size={16} />{item.weather.temp != null ? ` ${item.weather.temp} °C` : ''}
+                    </span>
+                )}
             </p>
-            {item.address && <p className="text-sm text-gray-600 mb-2">📍 {item.address}</p>}
+            {item.address && <p className="text-sm text-gray-600 mb-2 flex items-start gap-1.5"><MapPin size={16} className="text-primary mt-0.5 shrink-0" aria-hidden="true" /> {item.address}</p>}
             {item.description && <p className="text-sm text-gray-700 line-clamp-3">{item.description}</p>}
             <div className="flex flex-wrap gap-x-4 gap-y-1 mt-3 text-sm font-semibold print:hidden">
                 {item.poi_id && <Link to={`/misto/${item.poi_id}`} className="text-primary underline">Detail</Link>}
@@ -174,6 +185,8 @@ export default function Result() {
 
     const stops = result.itinerary.filter(i => i.type === 'poi');
     const totalKm = result.itinerary.reduce((sum, i) => sum + (i.distance_km ?? 0), 0);
+    // Čekání na otevření (např. při odjezdu v noci) nepočítáme do času výletu
+    const waitMins = result.itinerary.filter(i => i.type === 'wait').reduce((sum, i) => sum + i.duration_mins, 0);
     const date = request.time_from.slice(0, 10);
     let stopNo = 0;
 
@@ -182,11 +195,12 @@ export default function Result() {
             <div className="flex flex-col lg:flex-row gap-8">
                 {/* Itinerář */}
                 <div className="lg:w-1/2">
-                    <p className="text-gray-500">{new Date(date).toLocaleDateString('cs-CZ', { weekday: 'long', day: 'numeric', month: 'long' })} · {TRANSPORT_ICONS[request.transport_mode]} {TRANSPORT_LABELS[request.transport_mode]}</p>
+                    <p className="text-gray-500">{new Date(date).toLocaleDateString('cs-CZ', { weekday: 'long', day: 'numeric', month: 'long' })} · {TRANSPORT_LABELS[request.transport_mode].toLowerCase()}</p>
                     <h1 className="text-3xl font-bold text-primary-dark mb-4">Tvůj výlet: {result.location}</h1>
 
-                    <div className={`p-4 rounded-xl mb-4 ${WEATHER_STYLES[result.weather_status]}`}>
-                        {WEATHER_ICONS[result.weather_status]} {result.message}
+                    <div className={`p-4 rounded-xl mb-4 flex items-start gap-3 ${WEATHER_STYLES[result.weather_status]}`}>
+                        {(() => { const Icon = WEATHER_ICONS[result.weather_status]; return <Icon size={22} className="shrink-0 mt-0.5" aria-hidden="true" />; })()}
+                        <span>{result.message}</span>
                     </div>
 
                     {result.empty_reason ? (
@@ -201,7 +215,7 @@ export default function Result() {
                             <div className="bg-primary text-white p-5 rounded-2xl mb-4 grid grid-cols-2 sm:grid-cols-4 gap-4 text-center shadow-md">
                                 <div><p className="text-2xl font-extrabold">{stops.length}</p><p className="text-sm text-white/80">zastávek</p></div>
                                 <div><p className="text-2xl font-extrabold">{Math.round(totalKm)} km</p><p className="text-sm text-white/80">celkem</p></div>
-                                <div><p className="text-2xl font-extrabold">{formatMins(result.total_planned_time)}</p><p className="text-sm text-white/80">naplánováno</p></div>
+                                <div><p className="text-2xl font-extrabold">{formatMins(result.total_planned_time - waitMins)}</p><p className="text-sm text-white/80">naplánováno</p></div>
                                 <div><p className="text-2xl font-extrabold">{Math.round(result.total_estimated_cost)} Kč</p><p className="text-sm text-white/80">odhad nákladů</p></div>
                             </div>
                             {result.remaining_free_time_mins > 0 && (
@@ -212,14 +226,15 @@ export default function Result() {
 
                             {/* Akce */}
                             <div className="flex flex-wrap gap-3 mb-8 print:hidden">
-                                <button onClick={share} className="px-5 py-2 rounded-full bg-secondary text-primary-dark font-semibold hover:bg-primary hover:text-white transition">
-                                    {copied ? '✓ Odkaz zkopírován' : '🔗 Sdílet'}
+                                <button onClick={share} className={ACTION_BTN}>
+                                    {copied ? <Check size={18} aria-hidden="true" /> : <Share2 size={18} aria-hidden="true" />}
+                                    {copied ? 'Odkaz zkopírován' : 'Sdílet'}
                                 </button>
-                                <button onClick={() => downloadIcs(result, date)} className="px-5 py-2 rounded-full bg-secondary text-primary-dark font-semibold hover:bg-primary hover:text-white transition">
-                                    📅 Do kalendáře
+                                <button onClick={() => downloadIcs(result, date)} className={ACTION_BTN}>
+                                    <CalendarPlus size={18} aria-hidden="true" /> Do kalendáře
                                 </button>
-                                <button onClick={() => window.print()} className="px-5 py-2 rounded-full bg-secondary text-primary-dark font-semibold hover:bg-primary hover:text-white transition">
-                                    🖨️ Tisk
+                                <button onClick={() => window.print()} className={ACTION_BTN}>
+                                    <Printer size={18} aria-hidden="true" /> Tisk
                                 </button>
                             </div>
 

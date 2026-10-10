@@ -3,8 +3,10 @@ import type { ChangeEvent, FormEvent } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import type { Category, Location, PlanRequest } from '../types/api';
 import { fetchLocations } from '../services/apiClient';
-import { CATEGORY_ICONS, DIFFICULTY_LABELS, TRANSPORT_ICONS, TRANSPORT_LABELS } from '../constants';
-import { defaultTimes, localDate, resultUrl } from '../utils/plan';
+import { Check } from 'lucide-react';
+import { DIFFICULTY_LABELS, TRANSPORT_LABELS } from '../constants';
+import { CategoryBadge, TransportIcon } from '../components/Icons';
+import { defaultTimes, localDate, normalizeTimes, nowRounded, resultUrl } from '../utils/plan';
 
 const STEPS = 6;
 
@@ -39,6 +41,7 @@ interface WizardForm {
     max_travel_time_mins: string;
     difficulty: NonNullable<PlanRequest['difficulty']>;
     has_children: boolean;
+    indoor_when_rain: boolean;
 }
 
 function initialForm(presetLocation: string | null): WizardForm {
@@ -47,7 +50,8 @@ function initialForm(presetLocation: string | null): WizardForm {
         const saved = sessionStorage.getItem('wizardForm');
         if (saved) {
             const form: WizardForm = JSON.parse(saved);
-            const fresh = form.date < localDate(new Date()) ? { ...form, ...defaultTimes() } : form;
+            // Staré zadání (jiný den nebo čas, který už proběhl) -> aktuální časy
+            const fresh = form.date < localDate(new Date()) ? { ...form, ...defaultTimes() } : normalizeTimes(form);
             // "Naplánovat výlet odsud" z detailu místa má přednost před posledním zadáním
             return presetLocation ? { ...fresh, location_id: presetLocation } : fresh;
         }
@@ -67,6 +71,7 @@ function initialForm(presetLocation: string | null): WizardForm {
         max_travel_time_mins: '',
         difficulty: 'MEDIUM',
         has_children: false,
+        indoor_when_rain: false,
     };
 }
 
@@ -86,6 +91,7 @@ function toPlanRequest(f: WizardForm): PlanRequest {
         max_travel_time_mins: f.max_travel_time_mins === '' ? null : parseInt(f.max_travel_time_mins),
         difficulty: f.difficulty,
         has_children: f.has_children,
+        indoor_when_rain: f.indoor_when_rain ?? false,
     };
 }
 
@@ -104,6 +110,9 @@ export default function Wizard() {
             .catch(err => setLocationsError(err.message + ' – běží backend (docker compose up)?'));
     }, []);
 
+    // Časy opravujeme až po opuštění pole - při psaní z klávesnice by oprava skákala pod ruku
+    const fixTimes = () => setFormData(prev => normalizeTimes(prev));
+
     const handleChange = (e: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
         const { name, value, type } = e.target;
         const checked = (e.target as HTMLInputElement).checked;
@@ -115,6 +124,8 @@ export default function Wizard() {
             }
             if (type === 'checkbox') return { ...prev, [name]: checked };
             if (name === 'willing_to_pay_entry') return { ...prev, willing_to_pay_entry: value === 'yes' };
+            // Změna data -> hned opravíme časy (dnes nejde odjíždět v minulosti)
+            if (name === 'date') return normalizeTimes({ ...prev, date: value });
             return { ...prev, [name]: value };
         });
     };
@@ -137,8 +148,10 @@ export default function Wizard() {
     const prevStep = () => { setStepError(''); setStep(s => Math.max(s - 1, 1)); };
 
     const handleSubmit = () => {
-        sessionStorage.setItem('wizardForm', JSON.stringify(formData));
-        navigate(resultUrl(toPlanRequest(formData)));
+        // Mezitím mohl čas odjezdu proběhnout (průvodce byl dlouho otevřený) -> posuneme na teď
+        const form = normalizeTimes(formData);
+        sessionStorage.setItem('wizardForm', JSON.stringify(form));
+        navigate(resultUrl(toPlanRequest(form)));
     };
 
     const onSubmit = (e: FormEvent) => {
@@ -171,11 +184,13 @@ export default function Wizard() {
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-primary-dark mb-2">Čas odjezdu</label>
-                                    <input type="time" name="time_from" value={formData.time_from} onChange={handleChange} className={inputClass} required />
+                                    <input type="time" name="time_from" value={formData.time_from} onChange={handleChange} onBlur={fixTimes}
+                                        min={formData.date === localDate(new Date()) ? nowRounded() : undefined} className={inputClass} required />
                                 </div>
                                 <div>
                                     <label className="block text-primary-dark mb-2">Čas návratu</label>
-                                    <input type="time" name="time_to" value={formData.time_to} onChange={handleChange} className={inputClass} required />
+                                    <input type="time" name="time_to" value={formData.time_to} onChange={handleChange} onBlur={fixTimes}
+                                        min={formData.time_from} className={inputClass} required />
                                 </div>
                             </div>
                             <p className="text-sm text-gray-500">Podle data hlídáme otevírací dobu, sezónu (koupaliště, lanová centra) i předpověď počasí.</p>
@@ -204,7 +219,7 @@ export default function Wizard() {
                                     {(['CAR', 'BIKE', 'WALK'] as const).map(mode => (
                                         <label key={mode} className={`flex flex-col items-center gap-1 p-4 rounded-2xl border-2 cursor-pointer transition ${formData.transport_mode === mode ? 'border-primary bg-secondary' : 'border-gray-200 hover:border-primary'}`}>
                                             <input type="radio" name="transport_mode" value={mode} checked={formData.transport_mode === mode} onChange={handleChange} className="sr-only" />
-                                            <span className="text-4xl">{TRANSPORT_ICONS[mode]}</span>
+                                            <TransportIcon mode={mode} size={34} className="text-primary" />
                                             <span className="font-semibold">{TRANSPORT_LABELS[mode]}</span>
                                         </label>
                                     ))}
@@ -237,8 +252,8 @@ export default function Wizard() {
                                     return (
                                         <label key={interest.value} className={`relative flex flex-col items-center text-center gap-2 p-5 rounded-2xl border-2 cursor-pointer transition ${active ? 'border-primary bg-secondary' : 'border-gray-200 hover:border-primary'}`}>
                                             <input type="checkbox" name="interests" value={interest.value} checked={active} onChange={handleChange} className="sr-only" />
-                                            {active && <span className="absolute top-2 right-3 text-primary font-bold">✓</span>}
-                                            <span className="text-5xl">{CATEGORY_ICONS[interest.value]}</span>
+                                            {active && <Check size={20} strokeWidth={3} className="absolute top-3 right-3 text-primary" aria-hidden="true" />}
+                                            <CategoryBadge category={interest.value} size={56} />
                                             <span className="font-bold text-primary-dark">{interest.label}</span>
                                             <span className="text-sm text-gray-500">{interest.hint}</span>
                                         </label>
@@ -303,6 +318,10 @@ export default function Wizard() {
                             <label className="flex items-center space-x-3 p-4 border rounded-xl hover:bg-secondary cursor-pointer transition">
                                 <input type="checkbox" name="has_children" checked={formData.has_children} onChange={handleChange} className="text-primary focus:ring-primary h-5 w-5 rounded" />
                                 <span>Jedu s dětmi</span>
+                            </label>
+                            <label className="flex items-center space-x-3 p-4 border rounded-xl hover:bg-secondary cursor-pointer transition">
+                                <input type="checkbox" name="indoor_when_rain" checked={formData.indoor_when_rain ?? false} onChange={handleChange} className="text-primary focus:ring-primary h-5 w-5 rounded" />
+                                <span>Když bude pršet, chci jen místa uvnitř <span className="block text-sm text-gray-500">Jinak plán nezměníme, jen tě na déšť upozorníme.</span></span>
                             </label>
                         </div>
                     )}
